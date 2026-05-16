@@ -14,6 +14,17 @@ export const getKiteInstance = async () => {
   return kc;
 };
 
+/**
+ * Create a KiteConnect instance from an access token string directly.
+ * Use this in API routes where cookies() may not be available.
+ */
+export const getKiteInstanceFromToken = (accessToken: string) => {
+  return new KiteConnect({
+    api_key: (process.env.KITE_API_KEY || '').trim(),
+    access_token: accessToken,
+  });
+};
+
 export const getLoginUrl = () => {
   const kc = new KiteConnect({ api_key: (process.env.KITE_API_KEY || '').trim() });
   return kc.getLoginURL();
