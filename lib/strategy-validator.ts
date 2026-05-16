@@ -193,7 +193,7 @@ function createMockContext(
     },
     indicators: createIndicatorFunctions(candles, date),
     config: {
-      amountPerBuy: 50000,
+      amountPerBuy: 10000,
     },
   };
 }

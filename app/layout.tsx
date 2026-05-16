@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kite Backtester",
-  description: "Fetch and backtest historical market data with Zerodha Kite Connect",
+  title: "AlphaForge — Forge Your Trading Alpha",
+  description: "Backtest trading strategies against 20+ years of Indian market data. AI-powered, completely free. alphaforge.one",
 };
 
 export default function RootLayout({

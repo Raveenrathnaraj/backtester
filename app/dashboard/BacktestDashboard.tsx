@@ -9,7 +9,6 @@ import {
   TextField,
   Label,
   Input,
-  Description,
 } from '@heroui/react';
 import type {
   BacktestProgress,
@@ -49,7 +48,7 @@ export default function BacktestDashboard() {
   // Config state
   const [startDate, setStartDate] = useState('2023-01-01');
   const [endDate, setEndDate] = useState('2023-12-31');
-  const [amountPerBuy, setAmountPerBuy] = useState('50000');
+  const amountPerBuy = 10000; // Default; strategies embed their own amount in generated code
   const [randomRunsCount, setRandomRunsCount] = useState('5');
   const [selectedTokens, setSelectedTokens] = useState<number[]>([]);
 
@@ -229,7 +228,7 @@ export default function BacktestDashboard() {
     abortRef.current = new AbortController();
 
     try {
-      const result = await executeBacktest(startDate, endDate, Number(amountPerBuy), abortRef.current.signal);
+      const result = await executeBacktest(startDate, endDate, amountPerBuy, abortRef.current.signal);
       setResults([result]);
     } catch (err: any) {
       if (err.name !== 'AbortError') setError(err.message || 'Unknown error');
@@ -237,7 +236,7 @@ export default function BacktestDashboard() {
       setRunning(false);
       abortRef.current = null;
     }
-  }, [startDate, endDate, amountPerBuy, selectedStrategyId, selectedTokens]);
+  }, [startDate, endDate, selectedStrategyId, selectedTokens]);
 
   const handleRandomTest = useCallback(async () => {
     setRunning(true);
@@ -273,7 +272,7 @@ export default function BacktestDashboard() {
         setPhase('batch');
         
         const { start, end } = pairs[i];
-        const result = await executeBacktest(start, end, Number(amountPerBuy), abortRef.current.signal, prefix);
+        const result = await executeBacktest(start, end, amountPerBuy, abortRef.current.signal, prefix);
         allResults.push(result);
         
         setResults([...allResults]);
@@ -288,7 +287,7 @@ export default function BacktestDashboard() {
       setRunning(false);
       abortRef.current = null;
     }
-  }, [startDate, endDate, amountPerBuy, randomRunsCount, selectedStrategyId, selectedTokens]);
+  }, [startDate, endDate, randomRunsCount, selectedStrategyId, selectedTokens]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -305,8 +304,8 @@ export default function BacktestDashboard() {
   // Sorted + filtered trades
   const displayTrades = trades
     .filter((t) => {
-      if (tradeFilter === 'wins') return t.pnlAbs > 0;
-      if (tradeFilter === 'losses') return t.pnlAbs <= 0;
+      if (tradeFilter === 'wins') return (t.pnlAbs ?? 0) > 0;
+      if (tradeFilter === 'losses') return (t.pnlAbs ?? 0) <= 0;
       return true;
     })
     .sort((a, b) => {
@@ -322,7 +321,7 @@ export default function BacktestDashboard() {
           cmp = (a.exitDate || 'z').localeCompare(b.exitDate || 'z');
           break;
         case 'pnlPct':
-          cmp = a.pnlPct - b.pnlPct;
+          cmp = (a.pnlPct ?? 0) - (b.pnlPct ?? 0);
           break;
         case 'holdingDays':
           cmp = a.holdingDays - b.holdingDays;
@@ -343,16 +342,86 @@ export default function BacktestDashboard() {
   return (
     <div className="flex flex-col gap-6">
       {/* Row 1: Configuration + Strategy Rules */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Configuration Panel */}
-        <Card>
-          <Card.Header>
-            <Card.Title>Configuration</Card.Title>
+      <Card>
+        <Card.Header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <Card.Title>Backtest Setup</Card.Title>
             <Card.Description>
-              Set backtest parameters and stock universe
+              Configure strategy rules, parameters, and stock universe
             </Card.Description>
-          </Card.Header>
-          <Card.Content>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button
+              variant="secondary"
+              size="sm"
+              onPress={() => router.push('/dashboard/strategy/new')}
+              isDisabled={running}
+              className="flex-1 sm:flex-none"
+            >
+              + New Strategy
+            </Button>
+            {selectedStrategy && (
+              <button
+                type="button"
+                onClick={() => router.push(`/dashboard/strategy/${selectedStrategy.id}`)}
+                className="p-2 rounded-lg hover:bg-muted/10 transition-colors text-muted hover:text-foreground flex-shrink-0"
+                title="Edit strategy"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </Card.Header>
+        <Card.Content>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            {/* Left Column: Strategy */}
+            <div className="flex flex-col gap-4 text-sm">
+              <div>
+                <label className="text-xs font-medium text-muted mb-1.5 block">Strategy</label>
+                {strategiesLoading ? (
+                  <div className="flex items-center gap-2 text-muted text-xs py-2">
+                    <Spinner size="sm" />
+                    <span>Loading strategies…</span>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedStrategyId ?? ''}
+                    onChange={(e) => setSelectedStrategyId(Number(e.target.value))}
+                    disabled={running}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-shadow"
+                  >
+                    {strategies.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}{s.isDefault ? ' (default)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              
+              {selectedStrategy && (
+                <div className="space-y-2 flex-1">
+                  {selectedStrategy.description.split('\n').map((line, i) => (
+                    <div
+                      key={`desc-${i}`}
+                      className="flex items-start gap-3 p-3 rounded-lg bg-accent/5 border border-accent/10"
+                    >
+                      <span className="mt-0.5 text-accent font-bold text-base">
+                        {i === 0 ? '↗' : i === 1 ? '↘' : '◎'}
+                      </span>
+                      <p className="text-muted mt-0.5">{line}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+            </div>
+
+            {/* Right Column: Parameters */}
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4">
                 <TextField
@@ -365,7 +434,6 @@ export default function BacktestDashboard() {
                   <Label>Start Date</Label>
                   <Input />
                 </TextField>
-
                 <TextField
                   isRequired
                   type="date"
@@ -378,23 +446,6 @@ export default function BacktestDashboard() {
                 </TextField>
               </div>
 
-              <div className="flex flex-col gap-4">
-                <TextField
-                  isRequired
-                  type="number"
-                  value={amountPerBuy}
-                  onChange={setAmountPerBuy}
-                  isDisabled={running}
-                >
-                  <Label>Amount per Buy (₹)</Label>
-                  <Input />
-                  <Description>
-                    Capital deployed per buy signal
-                  </Description>
-                </TextField>
-              </div>
-
-              {/* Stock Universe — inline */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-muted">Stock Universe</label>
@@ -455,7 +506,8 @@ export default function BacktestDashboard() {
                 )}
               </div>
 
-              <div className="flex flex-col gap-3">
+              {/* Execution Actions */}
+              <div className="mt-2 flex flex-col gap-3">
                 <Button
                   onPress={handleRun}
                   isPending={running && phase !== 'batch'}
@@ -471,7 +523,8 @@ export default function BacktestDashboard() {
                 )}
               </div>
 
-              <div className="border-t border-border pt-4 mt-2">
+              {/* Batch / Random Runs */}
+              <div className="border-t border-border pt-4 mt-auto">
                 <div className="flex items-end gap-3">
                   <div className="flex-1">
                     <TextField
@@ -495,98 +548,21 @@ export default function BacktestDashboard() {
                   </Button>
                 </div>
                 <p className="text-[11px] text-muted mt-2.5">
-                  Batch runs backtests across random date windows (min. 1 month) within your selected start and end dates.
+                  Batch runs backtests across random date windows (min. 1 month).
                 </p>
                 {running && phase === 'batch' && (
                   <div className="mt-3 flex justify-end">
-                    <Button variant="outline" onPress={handleCancel} className="w-1/2">
+                    <Button variant="outline" onPress={handleCancel} className="w-full">
                       Cancel Random Test
                     </Button>
                   </div>
                 )}
               </div>
             </div>
-          </Card.Content>
-        </Card>
-
-        {/* Strategy Rules Panel */}
-        <Card>
-          <Card.Header className="flex-row items-center justify-between">
-            <div>
-              <Card.Title>Strategy Rules</Card.Title>
-              <Card.Description>
-                {selectedStrategy?.name || 'Select a strategy'}
-              </Card.Description>
-            </div>
-            {selectedStrategy && (
-              <button
-                type="button"
-                onClick={() => router.push(`/dashboard/strategy/${selectedStrategy.id}`)}
-                className="p-2 rounded-lg hover:bg-muted/10 transition-colors text-muted hover:text-foreground"
-                title="Edit strategy"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-              </button>
-            )}
-          </Card.Header>
-          <Card.Content>
-            <div className="flex flex-col gap-4 text-sm">
-              {/* Strategy Selector */}
-              <div>
-                {strategiesLoading ? (
-                  <div className="flex items-center gap-2 text-muted text-xs">
-                    <Spinner size="sm" />
-                    <span>Loading strategies…</span>
-                  </div>
-                ) : (
-                  <select
-                    value={selectedStrategyId ?? ''}
-                    onChange={(e) => setSelectedStrategyId(Number(e.target.value))}
-                    disabled={running}
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
-                  >
-                    {strategies.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}{s.isDefault ? ' (default)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              {/* Strategy Description */}
-              {selectedStrategy && (
-                <div className="space-y-2">
-                  {selectedStrategy.description.split('\n').map((line, i) => (
-                    <div
-                      key={`desc-${i}`}
-                      className="flex items-start gap-3 p-3 rounded-lg bg-accent/5 border border-accent/10"
-                    >
-                      <span className="mt-0.5 text-accent font-bold text-base">
-                        {i === 0 ? '↗' : i === 1 ? '↘' : '◎'}
-                      </span>
-                      <p className="text-muted mt-0.5">{line}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* New Strategy Button */}
-              <Button
-                variant="outline"
-                onPress={() => router.push('/dashboard/strategy/new')}
-                isDisabled={running}
-                className="w-full"
-              >
-                + New Strategy
-              </Button>
-            </div>
-          </Card.Content>
-        </Card>
-      </div>
+            
+          </div>
+        </Card.Content>
+      </Card>
 
       {/* Progress Bar */}
       {(running || phase === 'error') && (
@@ -691,11 +667,13 @@ export default function BacktestDashboard() {
           <StatCard
             label="Profit Factor"
             value={
-              summary.profitFactor === Infinity
-                ? '∞'
-                : summary.profitFactor.toFixed(2)
+              summary.profitFactor === null
+                ? '0.00'
+                : summary.profitFactor === Infinity
+                  ? '∞'
+                  : summary.profitFactor.toFixed(2)
             }
-            color={summary.profitFactor >= 1 ? 'success' : 'danger'}
+            color={(summary.profitFactor ?? 0) >= 1 ? 'success' : 'danger'}
           />
           <StatCard
             label="Max Drawdown"
@@ -766,8 +744,8 @@ export default function BacktestDashboard() {
                   {f === 'all'
                     ? `All (${trades.length})`
                     : f === 'wins'
-                      ? `Wins (${trades.filter((t) => t.pnlAbs > 0).length})`
-                      : `Losses (${trades.filter((t) => t.pnlAbs <= 0).length})`}
+                      ? `Wins (${trades.filter((t) => (t.pnlAbs ?? 0) > 0).length})`
+                      : `Losses (${trades.filter((t) => (t.pnlAbs ?? 0) <= 0).length})`}
                 </button>
               ))}
             </div>
@@ -831,7 +809,7 @@ export default function BacktestDashboard() {
                         {trade.entryDate}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
-                        {trade.entryPrice.toFixed(2)}
+                        {(trade.entryPrice ?? 0).toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-muted font-mono text-xs">
                         {trade.exitDate || '—'}
@@ -841,18 +819,17 @@ export default function BacktestDashboard() {
                       </td>
                       <td
                         className={`px-4 py-3 font-semibold font-mono text-xs ${
-                          trade.pnlPct > 0 ? 'text-success' : trade.pnlPct < 0 ? 'text-danger' : 'text-muted'
+                          (trade.pnlPct ?? 0) > 0 ? 'text-success' : (trade.pnlPct ?? 0) < 0 ? 'text-danger' : 'text-muted'
                         }`}
                       >
-                        {trade.pnlPct > 0 ? '+' : ''}
-                        {trade.pnlPct.toFixed(2)}%
+                        {trade.pnlPct != null ? `${trade.pnlPct > 0 ? '+' : ''}${trade.pnlPct.toFixed(2)}%` : '—'}
                       </td>
                       <td
                         className={`px-4 py-3 font-mono text-xs ${
-                          trade.pnlAbs > 0 ? 'text-success' : trade.pnlAbs < 0 ? 'text-danger' : 'text-muted'
+                          (trade.pnlAbs ?? 0) > 0 ? 'text-success' : (trade.pnlAbs ?? 0) < 0 ? 'text-danger' : 'text-muted'
                         }`}
                       >
-                        {formatINR(trade.pnlAbs)}
+                        {trade.pnlAbs != null ? formatINR(trade.pnlAbs) : '—'}
                       </td>
                       <td className="px-4 py-3 text-muted font-mono text-xs">
                         {trade.holdingDays}

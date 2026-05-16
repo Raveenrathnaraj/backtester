@@ -18,7 +18,7 @@ const STRATEGY_SYSTEM_PROMPT = `You are a trading strategy architect. You help u
 1. When the user describes a strategy idea, ask focused follow-up questions to understand ALL aspects:
    - Entry criteria (what triggers a buy?)
    - Exit criteria (stop-loss, take-profit, trailing stop?)
-   - Position sizing (fixed amount, percentage?)
+   - Capital per trade (how much ₹ to deploy per buy signal? Default: ₹10,000)
    - Step-up rules (add to winners? at what thresholds? how much?)
    - Scale-out rules (partial sells? at what levels? what fractions?)
    - Time-based rules (max holding period? day-of-week filters?)
@@ -73,7 +73,7 @@ ctx.indicators
   ctx.indicators.bbands(period, stddev?) // { upper, middle, lower }
   ctx.indicators.macd(fast?, slow?, signal?) // { macd, signal, histogram }
   ctx.indicators.prevClose(n)      // Close price N trading days ago
-ctx.config.amountPerBuy  // configured amount per buy (from user settings)
+ctx.config.amountPerBuy  // fallback amount (default ₹10,000). Prefer hardcoding the user's chosen amount directly.
 \`\`\`
 
 ## StrategyAction Return Types
@@ -81,11 +81,18 @@ ctx.config.amountPerBuy  // configured amount per buy (from user settings)
 \`\`\`
 { action: 'hold' }                              // Do nothing
 { action: 'buy', shares: 10 }                   // Buy exactly 10 shares
-{ action: 'buy', amount: 50000, useAmount: true } // Buy ₹50,000 worth
+{ action: 'buy', amount: 10000, useAmount: true } // Buy ₹10,000 worth (PREFERRED — hardcode the user's chosen amount)
 { action: 'sell', shares: 'all' }                // Sell entire position
 { action: 'sell', shares: 25 }                   // Sell exactly 25 shares
 { action: 'sell', fraction: 0.5, useFraction: true } // Sell 50% of position
 \`\`\`
+
+## Capital Per Trade
+
+- ALWAYS ask the user how much capital to deploy per buy signal.
+- If the user doesn't specify, default to ₹10,000.
+- Hardcode the amount directly in the generated code (e.g. \`amount: 10000\`). Do NOT use ctx.config.amountPerBuy — embed the actual number.
+- Include the capital amount in the strategy summary (e.g. "Capital per trade: ₹10,000")
 
 ## Example Strategy Code
 
@@ -94,8 +101,8 @@ Input: "Buy when close is near 52-week high, sell with 10% trailing stop"
 \`\`\`strategy_json
 {
   "name": "52-Week High Breakout",
-  "code": "if (ctx.position) {\\n  var trailingStop = ctx.position.peakSinceEntry * 0.90;\\n  if (ctx.candle.close <= trailingStop) {\\n    return { action: 'sell', shares: 'all' };\\n  }\\n} else {\\n  var high52w = ctx.indicators.rollingHigh(252);\\n  if (high52w !== null && ctx.candle.close >= high52w * 0.95) {\\n    return { action: 'buy', amount: ctx.config.amountPerBuy, useAmount: true };\\n  }\\n}\\nreturn { action: 'hold' };",
-  "summary": "• BUY when close ≥ 95% of 252-day rolling high\\n• SELL when close drops 10% from peak since entry (trailing stop)\\n• Position size: configured amount per buy"
+  "code": "if (ctx.position) {\\n  var trailingStop = ctx.position.peakSinceEntry * 0.90;\\n  if (ctx.candle.close <= trailingStop) {\\n    return { action: 'sell', shares: 'all' };\\n  }\\n} else {\\n  var high52w = ctx.indicators.rollingHigh(252);\\n  if (high52w !== null && ctx.candle.close >= high52w * 0.95) {\\n    return { action: 'buy', amount: 10000, useAmount: true };\\n  }\\n}\\nreturn { action: 'hold' };",
+  "summary": "• BUY when close ≥ 95% of 252-day rolling high\\n• SELL when close drops 10% from peak since entry (trailing stop)\\n• Capital per trade: ₹10,000"
 }
 \`\`\`
 
@@ -106,6 +113,7 @@ Input: "Buy when close is near 52-week high, sell with 10% trailing stop"
 - For step-up buys: check ctx.position exists before adding more
 - For partial sells: use the \`fraction\` + \`useFraction\` pattern
 - Generated code runs in a sandboxed scope — no access to globals
+- ALWAYS hardcode the capital amount in buy actions (e.g. \`amount: 10000\`) — do NOT reference ctx.config.amountPerBuy
 `;
 
 /**

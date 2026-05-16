@@ -13,10 +13,6 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold tracking-tight">
           Backtest Dashboard
         </h1>
-        <p className="text-muted text-sm mt-1">
-          52-week high breakout strategy with 10% trailing stop loss across
-          Nifty 500 stocks.
-        </p>
       </div>
       <BacktestDashboard />
     </div>

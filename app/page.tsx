@@ -1,22 +1,17 @@
 import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
 import { getLoginUrl } from '@/lib/kite';
-import LoginClient from './LoginClient';
+import LandingPage from './LandingPage';
 
 export const metadata = {
-  title: 'Login | Kite Backtester',
-  description: 'Authenticate with Zerodha Kite Connect to access the backtester dashboard.',
+  title: 'AlphaForge — Forge Your Trading Alpha',
+  description: 'Backtest trading strategies against 20+ years of Indian market data. AI-powered, completely free. alphaforge.one',
+  keywords: ['backtesting', 'trading', 'stocks', 'India', 'NSE', 'Nifty', 'AlphaForge', 'free'],
 };
 
-export default async function LoginPage() {
+export default async function HomePage() {
   const cookieStore = await cookies();
   const isAuthenticated = !!cookieStore.get('kite_access_token');
-
-  if (isAuthenticated) {
-    redirect('/dashboard');
-  }
-
   const loginUrl = getLoginUrl();
 
-  return <LoginClient loginUrl={loginUrl} />;
+  return <LandingPage isAuthenticated={isAuthenticated} loginUrl={loginUrl} />;
 }

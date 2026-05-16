@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
       maxAge: 60 * 60 * 24, // 1 day, expires daily anyway
     });
 
-    // Redirect to dashboard after successful login
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    // Redirect to hub page after successful login
+    return NextResponse.redirect(new URL('/get-started', request.url));
   } catch (error: any) {
     console.error('Kite auth error:', error);
     return NextResponse.json({ error: 'Failed to authenticate with Kite', details: error?.message || String(error) }, { status: 500 });

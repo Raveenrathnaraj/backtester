@@ -116,7 +116,7 @@ if (ctx.position) {
   // BUY CHECK: close within 5% of 252-day (52-week) high
   var high52w = ctx.indicators.rollingHigh(252);
   if (high52w !== null && ctx.candle.close >= high52w * 0.95) {
-    return { action: 'buy', amount: ctx.config.amountPerBuy, useAmount: true };
+    return { action: 'buy', amount: 10000, useAmount: true };
   }
 }
 return { action: 'hold' };`;

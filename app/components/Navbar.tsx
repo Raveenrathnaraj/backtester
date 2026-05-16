@@ -29,7 +29,7 @@ export default function Navbar() {
     <nav className="sticky top-0 z-50 h-16 border-b border-border backdrop-blur-xl bg-surface/80">
       <div className="flex items-center justify-between h-full max-w-6xl mx-auto px-6">
         <div className="flex items-center gap-6">
-          <a href="/dashboard" className="flex items-center gap-2.5 font-bold text-foreground no-underline tracking-tight">
+          <a href="/" className="flex items-center gap-2.5 font-bold text-foreground no-underline tracking-tight">
             <svg
               width="24"
               height="24"
@@ -43,7 +43,7 @@ export default function Navbar() {
             >
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
-            Kite Backtester
+            AlphaForge
           </a>
 
           <div className="hidden sm:flex items-center gap-1">

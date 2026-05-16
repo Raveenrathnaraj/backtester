@@ -88,7 +88,7 @@ export default function EquityChart({ data }: EquityChartProps) {
     // Convert to lightweight-charts format
     const chartData = data.map((point) => ({
       time: point.date as any, // YYYY-MM-DD string is accepted
-      value: point.equity,
+      value: point.equity ?? 0,
     }));
 
     series.setData(chartData);
