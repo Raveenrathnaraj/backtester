@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import type { ChatMessage, GeneratedStrategy } from '@/types/strategy';
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-3.1-pro-preview';
 
 function getClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;

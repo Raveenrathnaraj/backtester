@@ -1,108 +1,130 @@
-import { db } from './index';
-import { strategies } from './schema';
-import { desc, eq } from 'drizzle-orm';
+import { createServiceClient } from '@/lib/supabase/service';
 import type { ChatMessage, StrategyRecord } from '@/types/strategy';
 
+const supabase = createServiceClient();
+
 /**
- * Create a new strategy. Returns the new row ID.
+ * Create a new strategy. Returns the new UUID.
  */
-export function createStrategy(
+export async function createStrategy(
+  userId: string,
   name: string,
   description: string,
   generatedCode: string,
   chatHistory?: ChatMessage[],
-): number {
-  const result = db
-    .insert(strategies)
-    .values({
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('strategies')
+    .insert({
+      user_id: userId,
       name,
       description,
-      generatedCode,
-      chatHistory: chatHistory ? JSON.stringify(chatHistory) : null,
+      generated_code: generatedCode,
+      chat_history: chatHistory ?? null,
     })
-    .returning({ id: strategies.id })
-    .get();
+    .select('id')
+    .single();
 
-  return result.id;
+  if (error) throw new Error(`Failed to create strategy: ${error.message}`);
+  return data.id;
 }
 
 /**
  * Update a strategy in place (overwrite).
  */
-export function updateStrategy(
-  id: number,
+export async function updateStrategy(
+  userId: string,
+  id: string,
   name: string,
   description: string,
   generatedCode: string,
   chatHistory?: ChatMessage[],
-): void {
-  db.update(strategies)
-    .set({
+): Promise<void> {
+  const { error } = await supabase
+    .from('strategies')
+    .update({
       name,
       description,
-      generatedCode,
-      chatHistory: chatHistory ? JSON.stringify(chatHistory) : null,
-      updatedAt: new Date().toISOString(),
+      generated_code: generatedCode,
+      chat_history: chatHistory ?? null,
+      updated_at: new Date().toISOString(),
     })
-    .where(eq(strategies.id, id))
-    .run();
+    .eq('id', id)
+    .eq('user_id', userId);
+
+  if (error) throw new Error(`Failed to update strategy: ${error.message}`);
 }
 
 /**
- * List all strategies (most recent first).
+ * List all strategies for a user (most recent first).
  */
-export function listStrategies(): StrategyRecord[] {
-  return db
-    .select()
-    .from(strategies)
-    .orderBy(desc(strategies.createdAt))
-    .all()
-    .map(parseRow);
+export async function listStrategies(userId: string): Promise<StrategyRecord[]> {
+  const { data, error } = await supabase
+    .from('strategies')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Failed to list strategies: ${error.message}`);
+  return (data ?? []).map(parseRow);
 }
 
 /**
  * Get a specific strategy by ID.
  */
-export function getStrategy(id: number): StrategyRecord | null {
-  const row = db
-    .select()
-    .from(strategies)
-    .where(eq(strategies.id, id))
-    .get();
+export async function getStrategy(
+  userId: string,
+  id: string,
+): Promise<StrategyRecord | null> {
+  const { data, error } = await supabase
+    .from('strategies')
+    .select('*')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
 
-  if (!row) return null;
-  return parseRow(row);
+  if (error) throw new Error(`Failed to get strategy: ${error.message}`);
+  if (!data) return null;
+  return parseRow(data);
 }
 
 /**
  * Delete a strategy by ID.
  */
-export function deleteStrategy(id: number): void {
-  db.delete(strategies)
-    .where(eq(strategies.id, id))
-    .run();
+export async function deleteStrategy(userId: string, id: string): Promise<void> {
+  const { error } = await supabase
+    .from('strategies')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+
+  if (error) throw new Error(`Failed to delete strategy: ${error.message}`);
 }
 
 /**
- * Get the default strategy. Returns null if none is seeded.
+ * Get the default strategy for a user. Returns null if none.
  */
-export function getDefaultStrategy(): StrategyRecord | null {
-  const row = db
-    .select()
-    .from(strategies)
-    .where(eq(strategies.isDefault, true))
-    .get();
+export async function getDefaultStrategy(
+  userId: string,
+): Promise<StrategyRecord | null> {
+  const { data, error } = await supabase
+    .from('strategies')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_default', true)
+    .maybeSingle();
 
-  if (!row) return null;
-  return parseRow(row);
+  if (error) throw new Error(`Failed to get default strategy: ${error.message}`);
+  if (!data) return null;
+  return parseRow(data);
 }
 
 /**
- * Ensure the default 52-week breakout strategy exists.
- * Called on app startup / first run.
+ * Ensure the default 52-week breakout strategy exists for a user.
+ * Returns the strategy ID.
  */
-export function seedDefaultStrategy(): number {
-  const existing = getDefaultStrategy();
+export async function seedDefaultStrategy(userId: string): Promise<string> {
+  const existing = await getDefaultStrategy(userId);
   if (existing) return existing.id;
 
   const code = `// 52-Week High Breakout with 10% Trailing Stop
@@ -121,29 +143,34 @@ if (ctx.position) {
 }
 return { action: 'hold' };`;
 
-  const result = db
-    .insert(strategies)
-    .values({
+  const { data, error } = await supabase
+    .from('strategies')
+    .insert({
+      user_id: userId,
       name: '52-Week High Breakout',
       description:
         'Buy when close is within 5% of the rolling 52-week high. Sell with a 10% trailing stop from peak since entry.',
-      generatedCode: code,
-      isDefault: true,
+      generated_code: code,
+      is_default: true,
     })
-    .returning({ id: strategies.id })
-    .get();
+    .select('id')
+    .single();
 
-  return result.id;
+  if (error) throw new Error(`Failed to seed default strategy: ${error.message}`);
+  return data.id;
 }
 
 // --- Helpers ---
 
-function parseRow(row: typeof strategies.$inferSelect): StrategyRecord {
+function parseRow(row: any): StrategyRecord {
   return {
-    ...row,
-    isDefault: row.isDefault ?? false,
-    chatHistory: row.chatHistory
-      ? (JSON.parse(row.chatHistory) as ChatMessage[])
-      : null,
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    generatedCode: row.generated_code,
+    chatHistory: row.chat_history as ChatMessage[] | null,
+    isDefault: row.is_default ?? false,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }

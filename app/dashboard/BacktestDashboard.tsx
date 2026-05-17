@@ -9,6 +9,7 @@ import {
   TextField,
   Label,
   Input,
+  Pagination,
 } from '@heroui/react';
 import type {
   BacktestProgress,
@@ -29,7 +30,7 @@ interface SavedWatchlist {
   tokens: string;
 }
 
-type SortField = 'symbol' | 'entryDate' | 'exitDate' | 'pnlPct' | 'holdingDays';
+type SortField = 'symbol' | 'tradeCount' | 'pnlAbs' | 'pnlPct' | 'holdingDays';
 type SortDir = 'asc' | 'desc';
 
 type RunResult = {
@@ -39,7 +40,7 @@ type RunResult = {
   summary: BacktestSummary;
   trades: Trade[];
   equityCurve: EquityPoint[];
-  runId: number;
+  runId: string;
 };
 
 export default function BacktestDashboard() {
@@ -60,7 +61,7 @@ export default function BacktestDashboard() {
 
   // Strategy state
   const [strategies, setStrategies] = useState<StrategyRecord[]>([]);
-  const [selectedStrategyId, setSelectedStrategyId] = useState<number | null>(null);
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
   const [strategiesLoading, setStrategiesLoading] = useState(true);
 
   // Fetch strategies + watchlists on mount
@@ -69,7 +70,20 @@ export default function BacktestDashboard() {
       .then((res) => res.json())
       .then((data: StrategyRecord[]) => {
         setStrategies(data);
-        const defaultStrat = data.find((s) => s.isDefault) || data[0];
+        
+        let queryStrategyId: string | null = null;
+        try {
+          const params = new URLSearchParams(window.location.search);
+          queryStrategyId = params.get('strategyId');
+        } catch {
+          // ignore window undefined on server
+        }
+
+        const defaultStrat = 
+          (queryStrategyId && data.find((s) => s.id === queryStrategyId)) || 
+          data.find((s) => s.isDefault) || 
+          data[0];
+          
         if (defaultStrat) setSelectedStrategyId(defaultStrat.id);
         setStrategiesLoading(false);
       })
@@ -131,14 +145,43 @@ export default function BacktestDashboard() {
   const [progressPct, setProgressPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  // Results state
   const [results, setResults] = useState<RunResult[]>([]);
   const [activeRunIndex, setActiveRunIndex] = useState<number>(0);
 
+  // Load results from sessionStorage after initial mount to avoid hydration mismatch
+  useEffect(() => {
+    try {
+      const cachedResults = sessionStorage.getItem('bt_results');
+      if (cachedResults) {
+        setResults(JSON.parse(cachedResults));
+      }
+      const cachedIndex = sessionStorage.getItem('bt_activeRunIndex');
+      if (cachedIndex) {
+        setActiveRunIndex(Number(cachedIndex));
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
+  // Persist results to sessionStorage whenever they change
+  useEffect(() => {
+    try {
+      if (results.length > 0) {
+        sessionStorage.setItem('bt_results', JSON.stringify(results));
+        sessionStorage.setItem('bt_activeRunIndex', String(activeRunIndex));
+      }
+    } catch {
+      // quota exceeded or SSR — silently ignore
+    }
+  }, [results, activeRunIndex]);
+
   // Trade log sorting/filtering
-  const [sortField, setSortField] = useState<SortField>('entryDate');
+  const [sortField, setSortField] = useState<SortField>('pnlAbs');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [tradeFilter, setTradeFilter] = useState<'all' | 'wins' | 'losses'>('all');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 50;
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -224,6 +267,9 @@ export default function BacktestDashboard() {
     setPhase('');
     setProgressMessage('Starting...');
     setProgressPct(0);
+    setCurrentPage(1);
+    // Clear cached results so a fresh run starts clean
+    try { sessionStorage.removeItem('bt_results'); sessionStorage.removeItem('bt_activeRunIndex'); } catch {}
 
     abortRef.current = new AbortController();
 
@@ -245,6 +291,9 @@ export default function BacktestDashboard() {
     setActiveRunIndex(0);
     setPhase('');
     setProgressPct(0);
+    setCurrentPage(1);
+    // Clear cached results so a fresh run starts clean
+    try { sessionStorage.removeItem('bt_results'); sessionStorage.removeItem('bt_activeRunIndex'); } catch {}
 
     const count = Number(randomRunsCount);
     if (count < 1 || count > 20) {
@@ -302,35 +351,68 @@ export default function BacktestDashboard() {
   const runId = activeResult?.runId || null;
 
   // Sorted + filtered trades
-  const displayTrades = trades
-    .filter((t) => {
-      if (tradeFilter === 'wins') return (t.pnlAbs ?? 0) > 0;
-      if (tradeFilter === 'losses') return (t.pnlAbs ?? 0) <= 0;
-      return true;
-    })
-    .sort((a, b) => {
-      let cmp = 0;
-      switch (sortField) {
-        case 'symbol':
-          cmp = a.symbol.localeCompare(b.symbol);
-          break;
-        case 'entryDate':
-          cmp = a.entryDate.localeCompare(b.entryDate);
-          break;
-        case 'exitDate':
-          cmp = (a.exitDate || 'z').localeCompare(b.exitDate || 'z');
-          break;
-        case 'pnlPct':
-          cmp = (a.pnlPct ?? 0) - (b.pnlPct ?? 0);
-          break;
-        case 'holdingDays':
-          cmp = a.holdingDays - b.holdingDays;
-          break;
-      }
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
+  // Filtered trades
+  const filteredTrades = trades.filter((t) => {
+    if (tradeFilter === 'wins') return (t.pnlAbs ?? 0) > 0;
+    if (tradeFilter === 'losses') return (t.pnlAbs ?? 0) <= 0;
+    return true;
+  });
+
+  // Group by symbol
+  const aggregatedTradesMap = new Map<string, any>();
+  for (const t of filteredTrades) {
+    if (!aggregatedTradesMap.has(t.symbol)) {
+      aggregatedTradesMap.set(t.symbol, {
+        symbol: t.symbol,
+        tradeCount: 0,
+        pnlAbs: 0,
+        pnlPctSum: 0,
+        holdingDaysSum: 0,
+        status: 'closed',
+      });
+    }
+    const agg = aggregatedTradesMap.get(t.symbol);
+    agg.tradeCount += 1;
+    agg.pnlAbs += (t.pnlAbs ?? 0);
+    agg.pnlPctSum += (t.pnlPct ?? 0);
+    agg.holdingDaysSum += (t.holdingDays ?? 0);
+    if (t.status === 'open') agg.status = 'open';
+  }
+
+  const aggregatedTradesArray = Array.from(aggregatedTradesMap.values()).map(agg => ({
+    ...agg,
+    pnlPct: agg.tradeCount > 0 ? agg.pnlPctSum / agg.tradeCount : 0,
+    holdingDays: agg.tradeCount > 0 ? Math.round(agg.holdingDaysSum / agg.tradeCount) : 0,
+  }));
+
+  // Sorted aggregated trades
+  const displayTrades = aggregatedTradesArray.sort((a, b) => {
+    let cmp = 0;
+    switch (sortField) {
+      case 'symbol':
+        cmp = a.symbol.localeCompare(b.symbol);
+        break;
+      case 'tradeCount':
+        cmp = a.tradeCount - b.tradeCount;
+        break;
+      case 'pnlAbs':
+        cmp = a.pnlAbs - b.pnlAbs;
+        break;
+      case 'pnlPct':
+        cmp = a.pnlPct - b.pnlPct;
+        break;
+      case 'holdingDays':
+        cmp = a.holdingDays - b.holdingDays;
+        break;
+    }
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  const totalPages = Math.ceil(displayTrades.length / pageSize);
+  const paginatedTrades = displayTrades.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const toggleSort = (field: SortField) => {
+    setCurrentPage(1);
     if (sortField === field) {
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     } else {
@@ -350,30 +432,7 @@ export default function BacktestDashboard() {
               Configure strategy rules, parameters, and stock universe
             </Card.Description>
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Button
-              variant="secondary"
-              size="sm"
-              onPress={() => router.push('/dashboard/strategy/new')}
-              isDisabled={running}
-              className="flex-1 sm:flex-none"
-            >
-              + New Strategy
-            </Button>
-            {selectedStrategy && (
-              <button
-                type="button"
-                onClick={() => router.push(`/dashboard/strategy/${selectedStrategy.id}`)}
-                className="p-2 rounded-lg hover:bg-muted/10 transition-colors text-muted hover:text-foreground flex-shrink-0"
-                title="Edit strategy"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-              </button>
-            )}
-          </div>
+
         </Card.Header>
         <Card.Content>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -388,18 +447,50 @@ export default function BacktestDashboard() {
                     <span>Loading strategies…</span>
                   </div>
                 ) : (
-                  <select
-                    value={selectedStrategyId ?? ''}
-                    onChange={(e) => setSelectedStrategyId(Number(e.target.value))}
-                    disabled={running}
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-shadow"
-                  >
-                    {strategies.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}{s.isDefault ? ' (default)' : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex flex-col gap-2">
+                    <select
+                      value={selectedStrategyId ?? ''}
+                      onChange={(e) => setSelectedStrategyId(e.target.value)}
+                      disabled={running}
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-shadow"
+                    >
+                      {strategies.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}{s.isDefault ? ' (default)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedStrategy && (
+                      <div className="text-sm font-semibold text-foreground mt-1 text-center">
+                        {selectedStrategy.name}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onPress={() => router.push('/dashboard/strategy/new')}
+                        isDisabled={running}
+                        className="flex-1"
+                      >
+                        + New Strategy
+                      </Button>
+                      {selectedStrategy && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          isIconOnly
+                          onPress={() => router.push(`/dashboard/strategy/${selectedStrategy.id}`)}
+                          isDisabled={running}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
               
@@ -629,7 +720,10 @@ export default function BacktestDashboard() {
               {results.map((res, i) => (
                 <div
                   key={res.id}
-                  onClick={() => setActiveRunIndex(i)}
+                  onClick={() => {
+                    setActiveRunIndex(i);
+                    setCurrentPage(1);
+                  }}
                   className={`flex-shrink-0 w-56 p-4 rounded-xl cursor-pointer border-2 transition-all snap-start ${
                     activeRunIndex === i
                       ? 'border-accent bg-accent/10 shadow-sm'
@@ -721,9 +815,9 @@ export default function BacktestDashboard() {
         <Card>
           <Card.Header className="flex-row items-center justify-between flex-wrap gap-3">
             <div>
-              <Card.Title>Trade Log</Card.Title>
+              <Card.Title>Trade Summary</Card.Title>
               <Card.Description>
-                {displayTrades.length} trade{displayTrades.length !== 1 ? 's' : ''} shown
+                {displayTrades.length} symbol{displayTrades.length !== 1 ? 's' : ''} shown
                 {runId !== null && (
                   <span className="ml-2 text-xs opacity-50">Run #{runId}</span>
                 )}
@@ -734,7 +828,10 @@ export default function BacktestDashboard() {
                 <button
                   key={f}
                   type="button"
-                  onClick={() => setTradeFilter(f)}
+                  onClick={() => {
+                    setTradeFilter(f);
+                    setCurrentPage(1);
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                     tradeFilter === f
                       ? 'bg-accent text-accent-foreground'
@@ -763,93 +860,153 @@ export default function BacktestDashboard() {
                       onSort={toggleSort}
                     />
                     <SortableHeader
-                      label="Entry"
-                      field="entryDate"
+                      label="Trades"
+                      field="tradeCount"
                       current={sortField}
                       dir={sortDir}
                       onSort={toggleSort}
                     />
-                    <th className="px-4 py-3 font-medium">Entry ₹</th>
                     <SortableHeader
-                      label="Exit"
-                      field="exitDate"
-                      current={sortField}
-                      dir={sortDir}
-                      onSort={toggleSort}
-                    />
-                    <th className="px-4 py-3 font-medium">Exit ₹</th>
-                    <SortableHeader
-                      label="P&L %"
+                      label="Total P&L %"
                       field="pnlPct"
                       current={sortField}
                       dir={sortDir}
                       onSort={toggleSort}
                     />
-                    <th className="px-4 py-3 font-medium">P&L ₹</th>
                     <SortableHeader
-                      label="Days"
+                      label="Total P&L ₹"
+                      field="pnlAbs"
+                      current={sortField}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                    />
+                    <SortableHeader
+                      label="Avg Days"
                       field="holdingDays"
                       current={sortField}
                       dir={sortDir}
                       onSort={toggleSort}
                     />
-                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {displayTrades.map((trade, i) => (
+                  {paginatedTrades.map((agg, i) => (
                     <tr
-                      key={`${trade.symbol}-${trade.entryDate}-${i}`}
+                      key={`${agg.symbol}-${i}`}
                       className="border-b border-border/50 hover:bg-muted/5 transition-colors"
                     >
                       <td className="px-4 py-3 font-medium font-mono">
-                        {trade.symbol}
-                      </td>
-                      <td className="px-4 py-3 text-muted font-mono text-xs">
-                        {trade.entryDate}
+                        {agg.symbol}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
-                        {(trade.entryPrice ?? 0).toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-muted font-mono text-xs">
-                        {trade.exitDate || '—'}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs">
-                        {trade.exitPrice?.toFixed(2) || '—'}
+                        {agg.tradeCount}
                       </td>
                       <td
                         className={`px-4 py-3 font-semibold font-mono text-xs ${
-                          (trade.pnlPct ?? 0) > 0 ? 'text-success' : (trade.pnlPct ?? 0) < 0 ? 'text-danger' : 'text-muted'
+                          agg.pnlPct > 0 ? 'text-success' : agg.pnlPct < 0 ? 'text-danger' : 'text-muted'
                         }`}
                       >
-                        {trade.pnlPct != null ? `${trade.pnlPct > 0 ? '+' : ''}${trade.pnlPct.toFixed(2)}%` : '—'}
+                        {agg.pnlPct > 0 ? '+' : ''}{agg.pnlPct.toFixed(2)}%
                       </td>
                       <td
                         className={`px-4 py-3 font-mono text-xs ${
-                          (trade.pnlAbs ?? 0) > 0 ? 'text-success' : (trade.pnlAbs ?? 0) < 0 ? 'text-danger' : 'text-muted'
+                          agg.pnlAbs > 0 ? 'text-success' : agg.pnlAbs < 0 ? 'text-danger' : 'text-muted'
                         }`}
                       >
-                        {trade.pnlAbs != null ? formatINR(trade.pnlAbs) : '—'}
+                        {formatINR(agg.pnlAbs)}
                       </td>
                       <td className="px-4 py-3 text-muted font-mono text-xs">
-                        {trade.holdingDays}
+                        {agg.holdingDays}
                       </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
-                            trade.status === 'open'
-                              ? 'bg-warning/15 text-warning'
-                              : 'bg-muted/10 text-muted'
-                          }`}
-                        >
-                          {trade.status}
-                        </span>
+                      <td className="px-4 py-3 text-right">
+                        {runId ? (
+                          <a 
+                            href={`/dashboard/trade-details/${runId}/${agg.symbol}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-accent/10 text-accent hover:bg-accent/20 transition-colors text-xs font-semibold"
+                          >
+                            Details
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                          </a>
+                        ) : (
+                          <span className="text-muted text-[10px] uppercase">No run ID</span>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {totalPages > 1 && (
+              <div className="p-4 border-t border-border flex justify-center">
+                <Pagination className="w-full">
+                  <Pagination.Summary>
+                    Showing {Math.min((currentPage - 1) * pageSize + 1, displayTrades.length)}-{Math.min(currentPage * pageSize, displayTrades.length)} of {displayTrades.length} trades
+                  </Pagination.Summary>
+                  <Pagination.Content>
+                    <Pagination.Item>
+                      <Pagination.Previous
+                        isDisabled={currentPage === 1}
+                        onPress={() => setCurrentPage((p) => p - 1)}
+                      >
+                        <Pagination.PreviousIcon />
+                        <span>Previous</span>
+                      </Pagination.Previous>
+                    </Pagination.Item>
+
+                    {(() => {
+                      const pages: (number | 'ellipsis')[] = [];
+                      if (totalPages <= 7) {
+                        for (let i = 1; i <= totalPages; i++) {
+                          pages.push(i);
+                        }
+                      } else {
+                        pages.push(1);
+                        if (currentPage > 3) {
+                          pages.push('ellipsis');
+                        }
+                        const start = Math.max(2, currentPage - 1);
+                        const end = Math.min(totalPages - 1, currentPage + 1);
+                        for (let i = start; i <= end; i++) {
+                          pages.push(i);
+                        }
+                        if (currentPage < totalPages - 2) {
+                          pages.push('ellipsis');
+                        }
+                        pages.push(totalPages);
+                      }
+                      return pages.map((p, idx) =>
+                        p === 'ellipsis' ? (
+                          <Pagination.Item key={`ellipsis-${idx}`}>
+                            <Pagination.Ellipsis />
+                          </Pagination.Item>
+                        ) : (
+                          <Pagination.Item key={p}>
+                            <Pagination.Link
+                              isActive={p === currentPage}
+                              onPress={() => setCurrentPage(p)}
+                            >
+                              {p}
+                            </Pagination.Link>
+                          </Pagination.Item>
+                        )
+                      );
+                    })()}
+
+                    <Pagination.Item>
+                      <Pagination.Next
+                        isDisabled={currentPage === totalPages}
+                        onPress={() => setCurrentPage((p) => p + 1)}
+                      >
+                        <span>Next</span>
+                        <Pagination.NextIcon />
+                      </Pagination.Next>
+                    </Pagination.Item>
+                  </Pagination.Content>
+                </Pagination>
+              </div>
+            )}
           </Card.Content>
         </Card>
       )}

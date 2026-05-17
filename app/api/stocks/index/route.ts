@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { instruments } from '@/lib/db/schema';
-import { inArray } from 'drizzle-orm';
+import { upsertInstruments, getInstrumentsBySymbols } from '@/lib/db/instruments';
 
 /**
  * NSE requires a session cookie from the homepage.
@@ -10,7 +8,6 @@ import { inArray } from 'drizzle-orm';
 async function fetchNSEIndex(index: string) {
   const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   
-  // 1. Visit homepage to get cookies
   const homeRes = await fetch('https://www.nseindia.com/', {
     headers: { 'User-Agent': userAgent }
   });
@@ -18,7 +15,6 @@ async function fetchNSEIndex(index: string) {
   const cookies = homeRes.headers.get('set-cookie');
   if (!cookies) throw new Error('Failed to get NSE cookies');
 
-  // 2. Fetch the actual index data
   const apiUrl = `https://www.nseindia.com/api/equity-stockIndices?index=${encodeURIComponent(index)}`;
   const apiRes = await fetch(apiUrl, {
     headers: {
@@ -48,8 +44,6 @@ export async function GET(request: NextRequest) {
   try {
     const nseData = await fetchNSEIndex(index);
 
-    // NSE returns each constituent as an object with symbol, industry, etc.
-    // Filter out the index summary row itself
     const nseStocks = nseData.data
       .filter((s: any) => s.symbol !== 'NIFTY 50' && s.symbol !== index)
       .map((s: any) => ({
@@ -67,50 +61,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Look up which symbols already exist in our instruments table
-    const existingRows = db
-      .select()
-      .from(instruments)
-      .where(inArray(instruments.symbol, nseSymbols))
-      .all();
-
+    const existingRows = await getInstrumentsBySymbols(nseSymbols);
     const existingSet = new Set(existingRows.map((r) => r.symbol));
 
     // Auto-insert any symbols we haven't seen before
     const newStocks = nseStocks.filter((s: any) => !existingSet.has(s.symbol));
     if (newStocks.length > 0) {
-      db.transaction((tx) => {
-        for (const stock of newStocks) {
-          tx.insert(instruments)
-            .values({
-              symbol: stock.symbol,
-              companyName: stock.companyName,
-              industry: stock.industry,
-              series: stock.series,
-              isinCode: stock.isinCode,
-            })
-            .onConflictDoUpdate({
-              target: instruments.symbol,
-              set: {
-                companyName: stock.companyName,
-                industry: stock.industry,
-                series: stock.series,
-                isinCode: stock.isinCode,
-              },
-            })
-            .run();
-        }
-      });
+      await upsertInstruments(newStocks);
     }
 
     // Re-read all matching rows (now including newly inserted ones)
-    const allLocalRows = db
-      .select()
-      .from(instruments)
-      .where(inArray(instruments.symbol, nseSymbols))
-      .all();
+    const allLocalRows = await getInstrumentsBySymbols(nseSymbols);
 
-    // Build response — include all stocks, even those without a kiteToken yet
-    // (the backtest engine will fetch tokens from Kite on first run)
+    // Build response
     const stocks = nseSymbols.map((symbol: string) => {
       const local = allLocalRows.find((r) => r.symbol === symbol);
       const nseStock = nseStocks.find((s: any) => s.symbol === symbol);

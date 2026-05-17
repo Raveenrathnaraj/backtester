@@ -1,17 +1,11 @@
-import { cookies } from 'next/headers';
-import { getLoginUrl } from '@/lib/kite';
 import LandingPage from './LandingPage';
 
 export const metadata = {
-  title: 'AlphaForge — Forge Your Trading Alpha',
-  description: 'Backtest trading strategies against 20+ years of Indian market data. AI-powered, completely free. alphaforge.one',
-  keywords: ['backtesting', 'trading', 'stocks', 'India', 'NSE', 'Nifty', 'AlphaForge', 'free'],
+  title: 'AlphaForge — Free AI-Powered Stock Backtester for Indian Markets',
+  description: 'Backtest trading strategies against 20+ years of Indian stock market data for free. Build, test, and optimize with our advanced AI strategy builder.',
+  keywords: ['backtesting', 'trading', 'stocks', 'India', 'NSE', 'Nifty', 'Nifty 50', 'AI strategy builder', 'AlphaForge', 'free backtester'],
 };
 
-export default async function HomePage() {
-  const cookieStore = await cookies();
-  const isAuthenticated = !!cookieStore.get('kite_access_token');
-  const loginUrl = getLoginUrl();
-
-  return <LandingPage isAuthenticated={isAuthenticated} loginUrl={loginUrl} />;
+export default function HomePage() {
+  return <LandingPage isAuthenticated={true} loginUrl="" />;
 }

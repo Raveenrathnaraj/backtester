@@ -110,7 +110,13 @@ export default function LandingPage({
             </div>
             AlphaForge
           </a>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-5">
+            <a
+              href="/how-to"
+              className="text-sm font-medium text-muted hover:text-foreground transition-colors no-underline"
+            >
+              How to
+            </a>
             <ThemeSwitch />
             <a
               href={ctaHref}

@@ -5,16 +5,19 @@ import {
   seedDefaultStrategy,
 } from '@/lib/db/strategy-store';
 import { validateStrategy } from '@/lib/strategy-validator';
+import { getUserIdFromRequest } from '@/lib/get-user-id';
 
 /**
  * GET /api/strategy
- * List all strategies. Seeds the default if none exist.
+ * List all strategies for the current user. Seeds the default if none exist.
  */
-export async function GET() {
-  // Ensure default strategy exists
-  seedDefaultStrategy();
+export async function GET(request: NextRequest) {
+  const userId = getUserIdFromRequest(request);
 
-  const strategies = listStrategies();
+  // Ensure default strategy exists for this user
+  await seedDefaultStrategy(userId);
+
+  const strategies = await listStrategies(userId);
 
   return Response.json(strategies);
 }
@@ -25,6 +28,8 @@ export async function GET() {
  * Body: { name, description, code, chatHistory? }
  */
 export async function POST(request: NextRequest) {
+  const userId = getUserIdFromRequest(request);
+
   let body: {
     name: string;
     description: string;
@@ -56,7 +61,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const id = createStrategy(name, description, code, chatHistory);
+  const id = await createStrategy(userId, name, description, code, chatHistory);
 
   return Response.json({ id }, { status: 201 });
 }

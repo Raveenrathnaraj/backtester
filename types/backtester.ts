@@ -60,6 +60,6 @@ export interface BacktestProgress {
     trades: Trade[];
     equityCurve: EquityPoint[];
     summary: BacktestSummary;
-    runId: number;
+    runId: string;
   };
 }

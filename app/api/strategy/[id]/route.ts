@@ -5,15 +5,17 @@ import {
   deleteStrategy,
 } from '@/lib/db/strategy-store';
 import { validateStrategy } from '@/lib/strategy-validator';
+import { getUserIdFromRequest } from '@/lib/get-user-id';
 
 type Params = { params: Promise<{ id: string }> };
 
 /**
  * GET /api/strategy/:id
  */
-export async function GET(_request: NextRequest, { params }: Params) {
+export async function GET(request: NextRequest, { params }: Params) {
+  const userId = getUserIdFromRequest(request);
   const { id } = await params;
-  const strategy = getStrategy(Number(id));
+  const strategy = await getStrategy(userId, id);
 
   if (!strategy) {
     return Response.json({ error: 'Strategy not found' }, { status: 404 });
@@ -27,10 +29,10 @@ export async function GET(_request: NextRequest, { params }: Params) {
  * Update (overwrite) a strategy.
  */
 export async function PUT(request: NextRequest, { params }: Params) {
+  const userId = getUserIdFromRequest(request);
   const { id } = await params;
-  const numId = Number(id);
 
-  const existing = getStrategy(numId);
+  const existing = await getStrategy(userId, id);
   if (!existing) {
     return Response.json({ error: 'Strategy not found' }, { status: 404 });
   }
@@ -66,7 +68,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
     );
   }
 
-  updateStrategy(numId, name, description, code, chatHistory);
+  await updateStrategy(userId, id, name, description, code, chatHistory);
 
   return Response.json({ success: true });
 }
@@ -74,11 +76,11 @@ export async function PUT(request: NextRequest, { params }: Params) {
 /**
  * DELETE /api/strategy/:id
  */
-export async function DELETE(_request: NextRequest, { params }: Params) {
+export async function DELETE(request: NextRequest, { params }: Params) {
+  const userId = getUserIdFromRequest(request);
   const { id } = await params;
-  const numId = Number(id);
 
-  const existing = getStrategy(numId);
+  const existing = await getStrategy(userId, id);
   if (!existing) {
     return Response.json({ error: 'Strategy not found' }, { status: 404 });
   }
@@ -90,7 +92,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     );
   }
 
-  deleteStrategy(numId);
+  await deleteStrategy(userId, id);
 
   return Response.json({ success: true });
 }

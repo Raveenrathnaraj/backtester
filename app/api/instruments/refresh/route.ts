@@ -1,27 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { instruments } from '@/lib/db/schema';
-import { count } from 'drizzle-orm';
+import { upsertInstruments, getInstrumentCount } from '@/lib/db/instruments';
 
 /**
  * POST /api/instruments/refresh
  *
  * Cron-compatible endpoint that fetches an NSE index (default: NIFTY TOTAL MARKET)
  * and upserts all constituent symbols into the instruments table.
- *
- * Can be triggered:
- *  - Manually from the UI
- *  - Via a cron job (e.g., Vercel Cron, external scheduler)
- *
- * Query params:
- *  - ?index=NIFTY TOTAL MARKET  (optional, defaults to NIFTY TOTAL MARKET)
  */
 
 const NSE_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 async function fetchNSEIndex(indexName: string) {
-  // 1. Get session cookies
   const homeRes = await fetch('https://www.nseindia.com/', {
     headers: { 'User-Agent': NSE_USER_AGENT },
   });
@@ -29,7 +19,6 @@ async function fetchNSEIndex(indexName: string) {
   const cookies = homeRes.headers.get('set-cookie');
   if (!cookies) throw new Error('Failed to get NSE cookies');
 
-  // 2. Fetch index constituents
   const apiUrl = `https://www.nseindia.com/api/equity-stockIndices?index=${encodeURIComponent(indexName)}`;
   const apiRes = await fetch(apiUrl, {
     headers: {
@@ -73,36 +62,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Count before
-    const beforeCount =
-      db.select({ value: count() }).from(instruments).get()?.value ?? 0;
+    const beforeCount = await getInstrumentCount();
 
-    // Upsert all stocks in a single transaction
-    db.transaction((tx) => {
-      for (const stock of nseStocks) {
-        tx.insert(instruments)
-          .values({
-            symbol: stock.symbol,
-            companyName: stock.companyName,
-            industry: stock.industry,
-            series: stock.series,
-            isinCode: stock.isinCode,
-          })
-          .onConflictDoUpdate({
-            target: instruments.symbol,
-            set: {
-              companyName: stock.companyName,
-              industry: stock.industry,
-              series: stock.series,
-              isinCode: stock.isinCode,
-            },
-          })
-          .run();
-      }
-    });
+    // Upsert all stocks
+    await upsertInstruments(nseStocks);
 
     // Count after
-    const afterCount =
-      db.select({ value: count() }).from(instruments).get()?.value ?? 0;
+    const afterCount = await getInstrumentCount();
 
     return NextResponse.json({
       success: true,

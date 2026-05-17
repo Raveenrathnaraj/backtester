@@ -1,80 +1,94 @@
-import { db } from './index';
-import { backtestRuns } from './schema';
-import { desc, eq } from 'drizzle-orm';
+import { createServiceClient } from '@/lib/supabase/service';
 import type { BacktestSummary, Trade, EquityPoint } from '@/types/backtester';
 
+const supabase = createServiceClient();
+
 /**
- * Save a completed backtest run. Returns the new row ID.
+ * Save a completed backtest run. Returns the new UUID.
  */
-export function saveBacktestRun(
+export async function saveBacktestRun(
+  userId: string,
   config: { startDate: string; endDate: string; amountPerBuy: number },
   totalStocks: number,
   summary: BacktestSummary,
   trades: Trade[],
   equityCurve: EquityPoint[],
   durationMs: number,
-  strategyId?: number,
-): number {
-  const result = db
-    .insert(backtestRuns)
-    .values({
-      startDate: config.startDate,
-      endDate: config.endDate,
-      amountPerBuy: config.amountPerBuy,
-      totalStocks,
-      summary: JSON.stringify(summary),
-      trades: JSON.stringify(trades),
-      equityCurve: JSON.stringify(equityCurve),
-      durationMs,
-      strategyId: strategyId ?? null,
+  strategyId?: string,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('backtest_runs')
+    .insert({
+      user_id: userId,
+      start_date: config.startDate,
+      end_date: config.endDate,
+      amount_per_buy: config.amountPerBuy,
+      total_stocks: totalStocks,
+      summary,
+      trades,
+      equity_curve: equityCurve,
+      duration_ms: durationMs,
+      strategy_id: strategyId ?? null,
     })
-    .returning({ id: backtestRuns.id })
-    .get();
+    .select('id')
+    .single();
 
-  return result.id;
+  if (error) throw new Error(`Failed to save backtest run: ${error.message}`);
+  return data.id;
 }
 
 /**
- * List past backtest runs (most recent first).
+ * List past backtest runs for a user (most recent first).
  */
-export function listBacktestRuns(limit = 20) {
-  return db
-    .select({
-      id: backtestRuns.id,
-      startDate: backtestRuns.startDate,
-      endDate: backtestRuns.endDate,
-      amountPerBuy: backtestRuns.amountPerBuy,
-      totalStocks: backtestRuns.totalStocks,
-      summary: backtestRuns.summary,
-      createdAt: backtestRuns.createdAt,
-      durationMs: backtestRuns.durationMs,
-    })
-    .from(backtestRuns)
-    .orderBy(desc(backtestRuns.createdAt))
-    .limit(limit)
-    .all()
-    .map((row) => ({
-      ...row,
-      summary: JSON.parse(row.summary) as BacktestSummary,
-    }));
+export async function listBacktestRuns(userId: string, limit = 20) {
+  const { data, error } = await supabase
+    .from('backtest_runs')
+    .select(
+      'id, start_date, end_date, amount_per_buy, total_stocks, summary, created_at, duration_ms',
+    )
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(`Failed to list backtest runs: ${error.message}`);
+
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    amountPerBuy: row.amount_per_buy,
+    totalStocks: row.total_stocks,
+    summary: row.summary as BacktestSummary,
+    createdAt: row.created_at,
+    durationMs: row.duration_ms,
+  }));
 }
 
 /**
- * Get a specific backtest run by ID.
+ * Get a specific backtest run by ID (with user guard).
  */
-export function getBacktestRun(id: number) {
-  const row = db
-    .select()
-    .from(backtestRuns)
-    .where(eq(backtestRuns.id, id))
-    .get();
+export async function getBacktestRun(userId: string, id: string) {
+  const { data, error } = await supabase
+    .from('backtest_runs')
+    .select('*')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
 
-  if (!row) return null;
+  if (error) throw new Error(`Failed to get backtest run: ${error.message}`);
+  if (!data) return null;
 
   return {
-    ...row,
-    summary: JSON.parse(row.summary) as BacktestSummary,
-    trades: JSON.parse(row.trades) as Trade[],
-    equityCurve: JSON.parse(row.equityCurve) as EquityPoint[],
+    id: data.id,
+    startDate: data.start_date,
+    endDate: data.end_date,
+    amountPerBuy: data.amount_per_buy,
+    totalStocks: data.total_stocks,
+    summary: data.summary as BacktestSummary,
+    trades: data.trades as Trade[],
+    equityCurve: data.equity_curve as EquityPoint[],
+    createdAt: data.created_at,
+    durationMs: data.duration_ms,
+    strategyId: data.strategy_id,
   };
 }

@@ -83,7 +83,7 @@ export interface ChatMessage {
 // --- DB Record ---
 
 export interface StrategyRecord {
-  id: number;
+  id: string;
   name: string;
   description: string;
   generatedCode: string;

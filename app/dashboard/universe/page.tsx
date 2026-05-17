@@ -1,8 +1,8 @@
 import UniverseManager from './UniverseManager';
 
 export const metadata = {
-  title: 'Stock Lists | Kite Backtester',
-  description: 'Create and manage custom stock watchlists for backtesting.',
+  title: 'Stock Lists & Universes | AlphaForge',
+  description: 'Create and manage custom stock universes from Nifty indices for targeted backtesting.',
 };
 
 export default function UniversePage() {

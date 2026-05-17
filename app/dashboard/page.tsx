@@ -1,9 +1,8 @@
 import BacktestDashboard from './BacktestDashboard';
 
 export const metadata = {
-  title: 'Dashboard | Kite Backtester',
-  description:
-    'Run 52-week high breakout backtests across Nifty 500 stocks with Zerodha Kite Connect.',
+  title: 'Dashboard | AlphaForge',
+  description: 'View your recent backtests, monitor your active strategies, and analyze your performance.',
 };
 
 export default function DashboardPage() {

@@ -1,92 +1,79 @@
-import { db } from './index';
-import { candles, fetchRanges } from './schema';
-import { and, eq, gte, lte, sql } from 'drizzle-orm';
+import { createServiceClient } from '@/lib/supabase/service';
 import type { Candle } from '@/types/backtester';
 
+const supabase = createServiceClient();
+
 /**
- * Get candles from the local cache for a symbol within a date range.
+ * Get candles from the Supabase cache for a symbol within a date range.
  */
-export function getCachedCandles(
+export async function getCachedCandles(
   symbol: string,
   from: string,
   to: string,
-): Candle[] {
-  const rows = db
-    .select({
-      date: candles.date,
-      open: candles.open,
-      high: candles.high,
-      low: candles.low,
-      close: candles.close,
-    })
-    .from(candles)
-    .where(
-      and(
-        eq(candles.symbol, symbol),
-        gte(candles.date, from),
-        lte(candles.date, to),
-      ),
-    )
-    .orderBy(candles.date)
-    .all();
+): Promise<Candle[]> {
+  const { data, error } = await supabase
+    .from('candles')
+    .select('date, open, high, low, close')
+    .eq('symbol', symbol)
+    .gte('date', from)
+    .lte('date', to)
+    .order('date', { ascending: true });
 
-  return rows;
+  if (error) throw new Error(`Failed to get cached candles: ${error.message}`);
+
+  return (data ?? []).map((row: any) => ({
+    date: typeof row.date === 'string' ? row.date.slice(0, 10) : row.date,
+    open: row.open,
+    high: row.high,
+    low: row.low,
+    close: row.close,
+  }));
 }
 
 /**
  * Determine which date sub-ranges still need to be fetched from Kite.
  *
- * Strategy: We check fetch_ranges to see which [from, to] windows have
- * already been fetched for this symbol. Then we compute the complement
- * of the requested range minus the union of fetched ranges.
- *
  * Returns an array of { from, to } gaps that need fetching.
  */
-export function getMissingRanges(
+export async function getMissingRanges(
   symbol: string,
   from: string,
   to: string,
-): { from: string; to: string }[] {
-  // Get all fetched ranges for this symbol that overlap with [from, to]
-  const fetched = db
-    .select({
-      fromDate: fetchRanges.fromDate,
-      toDate: fetchRanges.toDate,
-    })
-    .from(fetchRanges)
-    .where(
-      and(
-        eq(fetchRanges.symbol, symbol),
-        lte(fetchRanges.fromDate, to),
-        gte(fetchRanges.toDate, from),
-      ),
-    )
-    .orderBy(fetchRanges.fromDate)
-    .all();
+): Promise<{ from: string; to: string }[]> {
+  const { data: fetched, error } = await supabase
+    .from('fetch_ranges')
+    .select('from_date, to_date')
+    .eq('symbol', symbol)
+    .lte('from_date', to)
+    .gte('to_date', from)
+    .order('from_date', { ascending: true });
 
-  if (fetched.length === 0) {
+  if (error)
+    throw new Error(`Failed to get fetch ranges: ${error.message}`);
+
+  if (!fetched || fetched.length === 0) {
     return [{ from, to }];
   }
 
   // Merge overlapping fetched ranges, then find gaps
   const merged = mergeRanges(
-    fetched.map((r) => ({ from: r.fromDate, to: r.toDate })),
+    fetched.map((r: any) => ({
+      from: r.from_date.slice(0, 10),
+      to: r.to_date.slice(0, 10),
+    })),
   );
   const gaps: { from: string; to: string }[] = [];
 
   let cursor = from;
   for (const range of merged) {
     if (cursor < range.from) {
-      // There's a gap before this fetched range
       gaps.push({ from: cursor, to: prevDay(range.from) });
     }
-    // Advance cursor past the fetched range
     if (range.to >= cursor) {
       cursor = nextDay(range.to);
     }
   }
 
-  // Gap after the last fetched range
   if (cursor <= to) {
     gaps.push({ from: cursor, to });
   }
@@ -96,58 +83,87 @@ export function getMissingRanges(
 
 /**
  * Store newly fetched candles and record the fetch range.
+ * Consolidates all fetch ranges for a symbol into a single spanning record.
  */
-export function storeCandles(
+export async function storeCandles(
   symbol: string,
   from: string,
   to: string,
   data: Candle[],
-): void {
-  if (data.length === 0) {
-    // Even if no candles came back (e.g. no trading days), record the range
-    db.insert(fetchRanges)
-      .values({ symbol, fromDate: from, toDate: to })
-      .run();
-    return;
+): Promise<void> {
+  // Find global min 'from' and max 'to' for this symbol
+  const { data: existing, error: fetchErr } = await supabase
+    .from('fetch_ranges')
+    .select('from_date, to_date')
+    .eq('symbol', symbol);
+
+  if (fetchErr)
+    throw new Error(`Failed to get fetch ranges: ${fetchErr.message}`);
+
+  let minFrom = from;
+  let maxTo = to;
+  for (const r of existing ?? []) {
+    const rd = r.from_date.slice(0, 10);
+    const rt = r.to_date.slice(0, 10);
+    if (rd < minFrom) minFrom = rd;
+    if (rt > maxTo) maxTo = rt;
   }
 
-  // Use a transaction for atomicity
-  db.transaction((tx) => {
-    // Insert candles, ignoring duplicates (ON CONFLICT DO NOTHING)
-    for (const candle of data) {
-      tx.insert(candles)
-        .values({
-          symbol,
-          date: candle.date,
-          open: candle.open,
-          high: candle.high,
-          low: candle.low,
-          close: candle.close,
-        })
-        .onConflictDoNothing()
-        .run();
-    }
+  // Insert candles (upsert — skip duplicates)
+  if (data.length > 0) {
+    // Batch into chunks of 500 to avoid payload limits
+    const BATCH_SIZE = 500;
+    for (let i = 0; i < data.length; i += BATCH_SIZE) {
+      const batch = data.slice(i, i + BATCH_SIZE).map((candle) => ({
+        symbol,
+        date: candle.date,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      }));
 
-    // Record the fetched range
-    tx.insert(fetchRanges)
-      .values({ symbol, fromDate: from, toDate: to })
-      .run();
-  });
+      const { error: insertErr } = await supabase
+        .from('candles')
+        .upsert(batch, { onConflict: 'symbol,date', ignoreDuplicates: true });
+
+      if (insertErr)
+        throw new Error(`Failed to insert candles: ${insertErr.message}`);
+    }
+  }
+
+  // Replace all existing fetch_range records with a single spanning record
+  const { error: deleteErr } = await supabase
+    .from('fetch_ranges')
+    .delete()
+    .eq('symbol', symbol);
+
+  if (deleteErr)
+    throw new Error(`Failed to delete fetch ranges: ${deleteErr.message}`);
+
+  const { error: insertRangeErr } = await supabase
+    .from('fetch_ranges')
+    .insert({ symbol, from_date: minFrom, to_date: maxTo });
+
+  if (insertRangeErr)
+    throw new Error(
+      `Failed to insert fetch range: ${insertRangeErr.message}`,
+    );
 }
 
 /**
- * Get count of cached candles (for progress display)
+ * Get count of cached symbols (for progress display).
  */
-export function getCachedSymbolCount(
+export async function getCachedSymbolCount(
   symbols: string[],
   from: string,
   to: string,
-): number {
+): Promise<number> {
   if (symbols.length === 0) return 0;
 
   let count = 0;
   for (const symbol of symbols) {
-    const missing = getMissingRanges(symbol, from, to);
+    const missing = await getMissingRanges(symbol, from, to);
     if (missing.length === 0) {
       count++;
     }
@@ -169,7 +185,6 @@ function mergeRanges(
     const last = merged[merged.length - 1];
     const current = sorted[i];
 
-    // Overlapping or adjacent — merge
     if (current.from <= nextDay(last.to)) {
       last.to = current.to > last.to ? current.to : last.to;
     } else {

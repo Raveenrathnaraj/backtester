@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AlphaForge — Forge Your Trading Alpha",
-  description: "Backtest trading strategies against 20+ years of Indian market data. AI-powered, completely free. alphaforge.one",
+  title: "AlphaForge — Free AI-Powered Stock Backtester for Indian Markets",
+  description: "Backtest trading strategies against 20+ years of Indian stock market data for free. Build, test, and optimize with our advanced AI strategy builder.",
 };
 
 export default function RootLayout({
@@ -31,6 +32,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );

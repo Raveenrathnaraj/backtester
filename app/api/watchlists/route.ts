@@ -1,27 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { watchlists } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { getUserIdFromRequest } from '@/lib/get-user-id';
+import { createServiceClient } from '@/lib/supabase/service';
 
-export async function GET() {
-  const rows = db
-    .select({
-      id: watchlists.id,
-      name: watchlists.name,
-      baseIndex: watchlists.baseIndex,
-      stockCount: watchlists.stockCount,
-      symbols: watchlists.symbols,
-      tokens: watchlists.tokens,
-      createdAt: watchlists.createdAt,
-      updatedAt: watchlists.updatedAt,
-    })
-    .from(watchlists)
-    .all();
+const supabase = createServiceClient();
+
+export async function GET(request: NextRequest) {
+  const userId = getUserIdFromRequest(request);
+
+  const { data, error } = await supabase
+    .from('watchlists')
+    .select('id, name, base_index, stock_count, symbols, tokens, created_at, updated_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Map column names to camelCase for frontend compatibility
+  const rows = (data ?? []).map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    baseIndex: row.base_index,
+    stockCount: row.stock_count,
+    symbols: row.symbols,
+    tokens: row.tokens,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
 
   return NextResponse.json(rows);
 }
 
 export async function POST(request: NextRequest) {
+  const userId = getUserIdFromRequest(request);
   const body = await request.json();
   const { name, baseIndex, symbols, tokens } = body;
 
@@ -39,22 +51,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = db
-    .insert(watchlists)
-    .values({
+  const { data, error } = await supabase
+    .from('watchlists')
+    .insert({
+      user_id: userId,
       name,
-      baseIndex,
-      symbols: JSON.stringify(symbols),
-      tokens: JSON.stringify(tokens),
-      stockCount: symbols.length,
+      base_index: baseIndex,
+      symbols,
+      tokens,
+      stock_count: symbols.length,
     })
-    .returning({ id: watchlists.id })
-    .get();
+    .select('id')
+    .single();
 
-  return NextResponse.json({ id: result.id }, { status: 201 });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ id: data.id }, { status: 201 });
 }
 
 export async function DELETE(request: NextRequest) {
+  const userId = getUserIdFromRequest(request);
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
@@ -62,7 +80,15 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'id is required' }, { status: 400 });
   }
 
-  db.delete(watchlists).where(eq(watchlists.id, Number(id))).run();
+  const { error } = await supabase
+    .from('watchlists')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true });
 }

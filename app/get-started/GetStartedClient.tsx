@@ -74,30 +74,7 @@ export default function GetStartedPage() {
         </div>
       </nav>
 
-      {/* ━━━ Hero ━━━ */}
-      <section className="relative px-6 pt-16 sm:pt-24 pb-8 text-center overflow-hidden">
-        {/* Background orbs */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute top-[-15%] right-[-10%] w-[400px] h-[400px] rounded-full bg-gradient-to-br from-violet-500/15 to-indigo-600/5 blur-3xl animate-float-orb" />
-          <div className="absolute bottom-[-10%] left-[-5%] w-[350px] h-[350px] rounded-full bg-gradient-to-br from-cyan-500/10 to-blue-600/5 blur-3xl animate-float-orb-reverse" />
-          <div className="absolute inset-0 bg-grid" />
-        </div>
 
-        <div className="relative z-10 max-w-2xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-border/60 bg-surface/50 backdrop-blur-md text-xs font-medium text-muted mb-6 animate-fade-in-up">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-glow" />
-            Welcome to AlphaForge
-          </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-[1.1] mb-4 animate-fade-in-up delay-100">
-            What would you like
-            <br />
-            <span className="text-gradient">to do today?</span>
-          </h1>
-          <p className="text-base sm:text-lg text-muted max-w-lg mx-auto animate-fade-in-up delay-200">
-            Create AI-powered strategies, build custom stock lists, or jump straight into backtesting.
-          </p>
-        </div>
-      </section>
 
       {/* ━━━ Cards ━━━ */}
       <section className="relative px-6 py-12 flex-1">

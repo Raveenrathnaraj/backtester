@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Button, Spinner } from '@heroui/react';
+import { Button, Spinner, Modal } from '@heroui/react';
+import { createClient } from '@/lib/supabase/browser';
+import type { User } from '@supabase/supabase-js';
 import type { ChatMessage, GeneratedStrategy, StrategyRecord } from '@/types/strategy';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -63,11 +65,24 @@ export default function StrategyBuilderPage() {
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [strategyName, setStrategyName] = useState('');
   const [generatedStrategy, setGeneratedStrategy] = useState<GeneratedStrategy | null>(null);
   const [showCode, setShowCode] = useState(false);
   const [initialLoading, setInitialLoading] = useState(!isNew);
+  const [currentStrategyId, setCurrentStrategyId] = useState<string | null>(isNew ? null : strategyId);
+  const [user, setUser] = useState<User | null>(null);
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -78,8 +93,8 @@ export default function StrategyBuilderPage() {
 
   // Load existing strategy
   useEffect(() => {
-    if (!isNew) {
-      fetch(`/api/strategy/${strategyId}`)
+    if (!isNew && currentStrategyId) {
+      fetch(`/api/strategy/${currentStrategyId}`)
         .then((res) => res.json())
         .then((data: StrategyRecord) => {
           setStrategyName(data.name);
@@ -143,11 +158,48 @@ export default function StrategyBuilderPage() {
       }
 
       const assistantMsg: ChatMessage = await res.json();
-      setMessages([...updatedMessages, assistantMsg]);
+      const newMessages = [...updatedMessages, assistantMsg];
+      setMessages(newMessages);
 
       if (assistantMsg.generatedStrategy) {
         setGeneratedStrategy(assistantMsg.generatedStrategy);
         setStrategyName(assistantMsg.generatedStrategy.name);
+        
+        // Auto-save the strategy
+        setSaving(true);
+        try {
+          const payload = {
+            name: assistantMsg.generatedStrategy.name,
+            description: assistantMsg.generatedStrategy.summary,
+            code: assistantMsg.generatedStrategy.code,
+            chatHistory: newMessages,
+          };
+
+          const saveRes = await fetch(
+            currentStrategyId ? `/api/strategy/${currentStrategyId}` : '/api/strategy',
+            {
+              method: currentStrategyId ? 'PUT' : 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            },
+          );
+
+          if (saveRes.ok) {
+            if (!currentStrategyId) {
+              const savedData = await saveRes.json();
+              if (savedData.id) {
+                setCurrentStrategyId(savedData.id);
+                window.history.replaceState(null, '', `/dashboard/strategy/${savedData.id}`);
+              }
+            }
+          } else {
+            console.error('Failed to auto-save strategy');
+          }
+        } catch (err) {
+          console.error('Auto-save failed', err);
+        } finally {
+          setSaving(false);
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to communicate with AI');
@@ -155,42 +207,59 @@ export default function StrategyBuilderPage() {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [inputValue, loading, messages]);
+  }, [inputValue, loading, messages, currentStrategyId]);
 
-  const handleSave = useCallback(async () => {
-    if (!generatedStrategy) return;
-    setSaving(true);
+  const handleDelete = useCallback(async () => {
+    if (!currentStrategyId) return;
+    setDeleting(true);
     setError(null);
-
     try {
-      const payload = {
-        name: generatedStrategy.name,
-        description: generatedStrategy.summary,
-        code: generatedStrategy.code,
-        chatHistory: messages,
-      };
-
-      const res = await fetch(
-        isNew ? '/api/strategy' : `/api/strategy/${strategyId}`,
-        {
-          method: isNew ? 'POST' : 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
-      );
-
+      const res = await fetch(`/api/strategy/${currentStrategyId}`, {
+        method: 'DELETE',
+      });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error || 'Failed to save strategy');
+        throw new Error(d.error || 'Failed to delete strategy');
       }
-
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Failed to save strategy');
-    } finally {
-      setSaving(false);
+      setError(err.message || 'Failed to delete strategy');
+      setDeleting(false);
     }
-  }, [generatedStrategy, messages, isNew, strategyId, router]);
+  }, [currentStrategyId, router]);
+
+  const handleClearChat = useCallback(async () => {
+    
+    // The first message is always the intro message containing the finalized strategy container
+    const newMessages = messages.length > 0 ? [messages[0]] : [];
+    setMessages(newMessages);
+
+    // Auto-save the cleared history if it's an existing strategy
+    if (currentStrategyId && generatedStrategy) {
+      setSaving(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/strategy/${currentStrategyId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: generatedStrategy.name,
+            description: generatedStrategy.summary,
+            code: generatedStrategy.code,
+            chatHistory: [], // Save empty array to DB so it doesn't restore old chat
+          }),
+        });
+        if (!res.ok) {
+          const d = await res.json();
+          throw new Error(d.error || 'Failed to clear chat history on server');
+        }
+      } catch (err: any) {
+        setError(err.message || 'Failed to clear chat history');
+      } finally {
+        setSaving(false);
+      }
+    }
+  }, [messages, currentStrategyId, generatedStrategy]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -239,7 +308,7 @@ export default function StrategyBuilderPage() {
               )}
             </div>
             <p className="text-xs text-muted mt-1 hidden sm:block">
-              {isNew
+              {!currentStrategyId
                 ? 'Describe your strategy — AI will ask questions and generate the code'
                 : 'Refine your strategy through conversation'}
             </p>
@@ -247,24 +316,91 @@ export default function StrategyBuilderPage() {
         </div>
 
         {generatedStrategy && (
-          <div className="flex items-center gap-2 flex-shrink-0 sm:ml-4">
+          <div className="flex items-center gap-2 flex-shrink-0 sm:ml-4 flex-wrap">
+            {currentStrategyId && (
+              <>
+                <Modal>
+                  <Button variant="ghost" className="h-9 px-3 text-sm">Clear Chat</Button>
+                  <Modal.Backdrop>
+                    <Modal.Container>
+                      <Modal.Dialog>
+                        <Modal.Header>
+                          <Modal.Heading>Clear Chat History?</Modal.Heading>
+                        </Modal.Header>
+                        <Modal.Body>
+                          <p className="text-sm text-muted">
+                            Are you sure you want to clear the chat history? This won't delete the strategy itself — it just clears your conversation while keeping the final strategy shown.
+                          </p>
+                        </Modal.Body>
+                        <Modal.Footer>
+                          <Button slot="close" variant="ghost">Cancel</Button>
+                          <Button slot="close" onPress={handleClearChat} variant="danger">Clear Chat</Button>
+                        </Modal.Footer>
+                        <Modal.CloseTrigger />
+                      </Modal.Dialog>
+                    </Modal.Container>
+                  </Modal.Backdrop>
+                </Modal>
+
+                <Modal>
+                  <Button isPending={deleting} variant="danger-soft" className="h-9 px-3 text-sm">Delete</Button>
+                  <Modal.Backdrop>
+                    <Modal.Container>
+                      <Modal.Dialog>
+                        <Modal.Header>
+                          <Modal.Heading>Delete Strategy?</Modal.Heading>
+                        </Modal.Header>
+                        <Modal.Body>
+                          <p className="text-sm text-muted">
+                            Are you sure you want to delete this strategy? This action cannot be undone.
+                          </p>
+                        </Modal.Body>
+                        <Modal.Footer>
+                          <Button slot="close" variant="ghost">Cancel</Button>
+                          <Button slot="close" onPress={handleDelete} variant="danger">Delete</Button>
+                        </Modal.Footer>
+                        <Modal.CloseTrigger />
+                      </Modal.Dialog>
+                    </Modal.Container>
+                  </Modal.Backdrop>
+                </Modal>
+              </>
+            )}
             <button
               type="button"
               onClick={() => setShowCode(!showCode)}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-muted hover:text-foreground border border-border hover:border-accent/30 transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-muted hover:text-foreground border border-border hover:border-accent/30 transition-all"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
               </svg>
               {showCode ? 'Hide Code' : 'View Code'}
             </button>
-            <Button
-              onPress={handleSave}
-              isPending={saving}
-              className="h-9 px-5 text-sm"
-            >
-              {saving ? 'Saving…' : 'Save Strategy'}
-            </Button>
+
+            <div className="flex items-center ml-2 border-l border-border/50 pl-3">
+              {saving ? (
+                <span className="text-xs text-muted flex items-center gap-2">
+                  <Spinner size="sm" color="current" /> Saving...
+                </span>
+              ) : (
+                <span className="text-xs text-success flex items-center gap-1">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  Saved
+                </span>
+              )}
+            </div>
+
+            {!user && (
+              <Button
+                variant="outline"
+                onPress={() => router.push('/login')}
+                className="h-9 px-4 text-xs font-medium ml-1"
+              >
+                Login to save permanently
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -300,7 +436,7 @@ export default function StrategyBuilderPage() {
         <div className="p-6 space-y-6">
 
           {/* Empty state for new strategy */}
-          {isNew && messages.length === 0 && (
+          {!currentStrategyId && messages.length === 0 && (
             <AssistantBubble>
               <div>
                 <p className="font-semibold text-foreground mb-1">
@@ -374,7 +510,7 @@ export default function StrategyBuilderPage() {
             onKeyDown={handleKeyDown}
             disabled={loading}
             placeholder={
-              isNew && messages.length === 0
+              !currentStrategyId && messages.length === 0
                 ? 'Describe your trading strategy…'
                 : 'Type a message… (Enter to send, Shift+Enter for new line)'
             }
