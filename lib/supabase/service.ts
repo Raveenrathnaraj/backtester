@@ -1,4 +1,4 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Server-side Supabase client using the SERVICE ROLE key.
@@ -10,7 +10,7 @@ export function createServiceClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SECRET_KEY!,
     {
-      db: { schema: 'alphaforge' },
+      db: { schema: "alphaforge" },
       auth: { persistSession: false },
     },
   );

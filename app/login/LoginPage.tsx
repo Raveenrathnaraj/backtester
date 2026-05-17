@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/browser';
-import { Button, Card } from '@heroui/react';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/browser";
+import { Button, Card } from "@heroui/react";
 
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -34,7 +34,7 @@ export default function LoginPage() {
         });
         if (error) throw error;
         setSuccessMessage(
-          'Check your email for a confirmation link to complete your sign up.',
+          "Check your email for a confirmation link to complete your sign up.",
         );
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -42,11 +42,11 @@ export default function LoginPage() {
           password,
         });
         if (error) throw error;
-        router.push('/get-started');
+        router.push("/get-started");
         router.refresh();
       }
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      setError(err.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
@@ -58,14 +58,14 @@ export default function LoginPage() {
 
     try {
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
           redirectTo: `${window.location.origin}/api/auth/callback`,
         },
       });
       if (error) throw error;
     } catch (err: any) {
-      setError(err.message || 'Google sign-in failed');
+      setError(err.message || "Google sign-in failed");
       setGoogleLoading(false);
     }
   };
@@ -91,12 +91,12 @@ export default function LoginPage() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold tracking-tight mb-1">
-            {isSignUp ? 'Create Account' : 'Welcome Back'}
+            {isSignUp ? "Create Account" : "Welcome Back"}
           </h1>
           <p className="text-muted text-sm">
             {isSignUp
-              ? 'Sign up to sync your strategies across devices'
-              : 'Sign in to access your saved strategies'}
+              ? "Sign up to sync your strategies across devices"
+              : "Sign in to access your saved strategies"}
           </p>
         </div>
 
@@ -136,14 +136,19 @@ export default function LoginPage() {
             <span className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted">Or continue with email</span>
+            <span className="bg-card px-2 text-muted">
+              Or continue with email
+            </span>
           </div>
         </div>
 
         {/* Email/Password Form */}
         <form onSubmit={handleEmailAuth} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="email" className="text-xs font-semibold text-muted uppercase tracking-wider">
+            <label
+              htmlFor="email"
+              className="text-xs font-semibold text-muted uppercase tracking-wider"
+            >
               Email
             </label>
             <input
@@ -158,7 +163,10 @@ export default function LoginPage() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="password" className="text-xs font-semibold text-muted uppercase tracking-wider">
+            <label
+              htmlFor="password"
+              className="text-xs font-semibold text-muted uppercase tracking-wider"
+            >
               Password
             </label>
             <input
@@ -193,11 +201,11 @@ export default function LoginPage() {
           >
             {loading
               ? isSignUp
-                ? 'Creating account…'
-                : 'Signing in…'
+                ? "Creating account…"
+                : "Signing in…"
               : isSignUp
-                ? 'Create Account'
-                : 'Sign In'}
+                ? "Create Account"
+                : "Sign In"}
           </Button>
         </form>
 
@@ -205,7 +213,7 @@ export default function LoginPage() {
         <div className="text-center mt-6 text-sm text-muted">
           {isSignUp ? (
             <>
-              Already have an account?{' '}
+              Already have an account?{" "}
               <button
                 onClick={() => {
                   setIsSignUp(false);
@@ -219,7 +227,7 @@ export default function LoginPage() {
             </>
           ) : (
             <>
-              Don&apos;t have an account?{' '}
+              Don&apos;t have an account?{" "}
               <button
                 onClick={() => {
                   setIsSignUp(true);
@@ -237,7 +245,8 @@ export default function LoginPage() {
         {/* Note about optional auth */}
         <div className="mt-6 pt-6 border-t border-border text-center text-xs text-muted/70">
           <p>
-            Login is optional — you can use AlphaForge freely without an account.
+            Login is optional — you can use AlphaForge freely without an
+            account.
             <br />
             Sign in to sync strategies and results across devices.
           </p>

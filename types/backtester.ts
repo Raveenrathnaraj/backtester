@@ -19,7 +19,7 @@ export interface Trade {
   pnlPct: number;
   holdingDays: number;
   shares: number;
-  status: 'closed' | 'open';
+  status: "closed" | "open";
 }
 
 // Equity curve data point
@@ -53,7 +53,7 @@ export interface BacktestConfig {
 
 // SSE progress events
 export interface BacktestProgress {
-  phase: 'instruments' | 'historical' | 'backtest' | 'done' | 'error';
+  phase: "instruments" | "historical" | "backtest" | "done" | "error";
   message: string;
   progress?: number; // 0-100
   data?: {

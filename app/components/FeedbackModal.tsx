@@ -1,12 +1,19 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Button, Modal, TextArea, RadioGroup, Radio, Label } from '@heroui/react';
+import { useState } from "react";
+import {
+  Button,
+  Modal,
+  TextArea,
+  RadioGroup,
+  Radio,
+  Label,
+} from "@heroui/react";
 
 export default function FeedbackModal() {
   const [isOpen, setIsOpen] = useState(false);
-  const [type, setType] = useState('feature');
-  const [content, setContent] = useState('');
+  const [type, setType] = useState("feature");
+  const [content, setContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,25 +26,25 @@ export default function FeedbackModal() {
     setSuccess(false);
 
     try {
-      const res = await fetch('/api/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, content }),
       });
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Failed to submit feedback');
+        throw new Error(data.error || "Failed to submit feedback");
       }
 
       setSuccess(true);
-      setContent('');
+      setContent("");
       setTimeout(() => {
         setIsOpen(false);
         setSuccess(false);
       }, 2000);
     } catch (err: any) {
-      setError(err.message || 'Something went wrong');
+      setError(err.message || "Something went wrong");
     } finally {
       setIsSubmitting(false);
     }
@@ -66,12 +73,23 @@ export default function FeedbackModal() {
                 {success ? (
                   <div className="py-6 flex flex-col items-center justify-center text-center">
                     <div className="w-12 h-12 rounded-full bg-success/20 text-success flex items-center justify-center mb-4">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-foreground">Thank you!</h3>
-                    <p className="text-sm text-muted mt-1">Your feedback has been submitted successfully.</p>
+                    <h3 className="text-lg font-semibold text-foreground">
+                      Thank you!
+                    </h3>
+                    <p className="text-sm text-muted mt-1">
+                      Your feedback has been submitted successfully.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-4 pb-2">
@@ -81,7 +99,9 @@ export default function FeedbackModal() {
                       orientation="horizontal"
                       className="text-sm gap-4"
                     >
-                      <Label className="text-sm font-medium">What kind of feedback do you have?</Label>
+                      <Label className="text-sm font-medium">
+                        What kind of feedback do you have?
+                      </Label>
                       <Radio value="feature" className="text-sm">
                         <Radio.Control>
                           <Radio.Indicator />
@@ -101,7 +121,11 @@ export default function FeedbackModal() {
                     </RadioGroup>
 
                     <TextArea
-                      placeholder={type === 'bug' ? "Please describe the issue you encountered..." : "What feature would you like to see?"}
+                      placeholder={
+                        type === "bug"
+                          ? "Please describe the issue you encountered..."
+                          : "What feature would you like to see?"
+                      }
                       rows={4}
                       value={content}
                       onChange={(e) => setContent(e.target.value)}

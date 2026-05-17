@@ -1,11 +1,11 @@
-import { NextRequest } from 'next/server';
+import { NextRequest } from "next/server";
 import {
   listStrategies,
   createStrategy,
   seedDefaultStrategy,
-} from '@/lib/db/strategy-store';
-import { validateStrategy } from '@/lib/strategy-validator';
-import { getUserIdFromRequest } from '@/lib/get-user-id';
+} from "@/lib/db/strategy-store";
+import { validateStrategy } from "@/lib/strategy-validator";
+import { getUserIdFromRequest } from "@/lib/get-user-id";
 
 /**
  * GET /api/strategy
@@ -40,14 +40,14 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return Response.json({ error: 'Invalid request body' }, { status: 400 });
+    return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const { name, description, code, chatHistory } = body;
 
   if (!name || !description || !code) {
     return Response.json(
-      { error: 'Missing name, description, or code' },
+      { error: "Missing name, description, or code" },
       { status: 400 },
     );
   }

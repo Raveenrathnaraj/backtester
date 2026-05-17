@@ -1,11 +1,11 @@
-import { NextRequest } from 'next/server';
+import { NextRequest } from "next/server";
 import {
   getStrategy,
   updateStrategy,
   deleteStrategy,
-} from '@/lib/db/strategy-store';
-import { validateStrategy } from '@/lib/strategy-validator';
-import { getUserIdFromRequest } from '@/lib/get-user-id';
+} from "@/lib/db/strategy-store";
+import { validateStrategy } from "@/lib/strategy-validator";
+import { getUserIdFromRequest } from "@/lib/get-user-id";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   const strategy = await getStrategy(userId, id);
 
   if (!strategy) {
-    return Response.json({ error: 'Strategy not found' }, { status: 404 });
+    return Response.json({ error: "Strategy not found" }, { status: 404 });
   }
 
   return Response.json(strategy);
@@ -34,7 +34,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
 
   const existing = await getStrategy(userId, id);
   if (!existing) {
-    return Response.json({ error: 'Strategy not found' }, { status: 404 });
+    return Response.json({ error: "Strategy not found" }, { status: 404 });
   }
 
   let body: {
@@ -47,14 +47,14 @@ export async function PUT(request: NextRequest, { params }: Params) {
   try {
     body = await request.json();
   } catch {
-    return Response.json({ error: 'Invalid request body' }, { status: 400 });
+    return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const { name, description, code, chatHistory } = body;
 
   if (!name || !description || !code) {
     return Response.json(
-      { error: 'Missing name, description, or code' },
+      { error: "Missing name, description, or code" },
       { status: 400 },
     );
   }
@@ -82,12 +82,12 @@ export async function DELETE(request: NextRequest, { params }: Params) {
 
   const existing = await getStrategy(userId, id);
   if (!existing) {
-    return Response.json({ error: 'Strategy not found' }, { status: 404 });
+    return Response.json({ error: "Strategy not found" }, { status: 404 });
   }
 
   if (existing.isDefault) {
     return Response.json(
-      { error: 'Cannot delete the default strategy' },
+      { error: "Cannot delete the default strategy" },
       { status: 403 },
     );
   }

@@ -1,5 +1,5 @@
-import { createServiceClient } from '@/lib/supabase/service';
-import type { ChatMessage, StrategyRecord } from '@/types/strategy';
+import { createServiceClient } from "@/lib/supabase/service";
+import type { ChatMessage, StrategyRecord } from "@/types/strategy";
 
 const supabase = createServiceClient();
 
@@ -14,7 +14,7 @@ export async function createStrategy(
   chatHistory?: ChatMessage[],
 ): Promise<string> {
   const { data, error } = await supabase
-    .from('strategies')
+    .from("strategies")
     .insert({
       user_id: userId,
       name,
@@ -22,7 +22,7 @@ export async function createStrategy(
       generated_code: generatedCode,
       chat_history: chatHistory ?? null,
     })
-    .select('id')
+    .select("id")
     .single();
 
   if (error) throw new Error(`Failed to create strategy: ${error.message}`);
@@ -41,7 +41,7 @@ export async function updateStrategy(
   chatHistory?: ChatMessage[],
 ): Promise<void> {
   const { error } = await supabase
-    .from('strategies')
+    .from("strategies")
     .update({
       name,
       description,
@@ -49,8 +49,8 @@ export async function updateStrategy(
       chat_history: chatHistory ?? null,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', id)
-    .eq('user_id', userId);
+    .eq("id", id)
+    .eq("user_id", userId);
 
   if (error) throw new Error(`Failed to update strategy: ${error.message}`);
 }
@@ -58,12 +58,14 @@ export async function updateStrategy(
 /**
  * List all strategies for a user (most recent first).
  */
-export async function listStrategies(userId: string): Promise<StrategyRecord[]> {
+export async function listStrategies(
+  userId: string,
+): Promise<StrategyRecord[]> {
   const { data, error } = await supabase
-    .from('strategies')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .from("strategies")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
 
   if (error) throw new Error(`Failed to list strategies: ${error.message}`);
   return (data ?? []).map(parseRow);
@@ -77,10 +79,10 @@ export async function getStrategy(
   id: string,
 ): Promise<StrategyRecord | null> {
   const { data, error } = await supabase
-    .from('strategies')
-    .select('*')
-    .eq('id', id)
-    .eq('user_id', userId)
+    .from("strategies")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (error) throw new Error(`Failed to get strategy: ${error.message}`);
@@ -91,12 +93,15 @@ export async function getStrategy(
 /**
  * Delete a strategy by ID.
  */
-export async function deleteStrategy(userId: string, id: string): Promise<void> {
+export async function deleteStrategy(
+  userId: string,
+  id: string,
+): Promise<void> {
   const { error } = await supabase
-    .from('strategies')
+    .from("strategies")
     .delete()
-    .eq('id', id)
-    .eq('user_id', userId);
+    .eq("id", id)
+    .eq("user_id", userId);
 
   if (error) throw new Error(`Failed to delete strategy: ${error.message}`);
 }
@@ -108,13 +113,14 @@ export async function getDefaultStrategy(
   userId: string,
 ): Promise<StrategyRecord | null> {
   const { data, error } = await supabase
-    .from('strategies')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_default', true)
+    .from("strategies")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("is_default", true)
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to get default strategy: ${error.message}`);
+  if (error)
+    throw new Error(`Failed to get default strategy: ${error.message}`);
   if (!data) return null;
   return parseRow(data);
 }
@@ -144,19 +150,20 @@ if (ctx.position) {
 return { action: 'hold' };`;
 
   const { data, error } = await supabase
-    .from('strategies')
+    .from("strategies")
     .insert({
       user_id: userId,
-      name: '52-Week High Breakout',
+      name: "52-Week High Breakout",
       description:
-        'Buy when close is within 5% of the rolling 52-week high. Sell with a 10% trailing stop from peak since entry.',
+        "Buy when close is within 5% of the rolling 52-week high. Sell with a 10% trailing stop from peak since entry.",
       generated_code: code,
       is_default: true,
     })
-    .select('id')
+    .select("id")
     .single();
 
-  if (error) throw new Error(`Failed to seed default strategy: ${error.message}`);
+  if (error)
+    throw new Error(`Failed to seed default strategy: ${error.message}`);
   return data.id;
 }
 

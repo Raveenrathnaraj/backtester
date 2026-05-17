@@ -1,8 +1,9 @@
-import BacktestDashboard from './BacktestDashboard';
+import BacktestDashboard from "./BacktestDashboard";
 
 export const metadata = {
-  title: 'Dashboard | AlphaForge',
-  description: 'View your recent backtests, monitor your active strategies, and analyze your performance.',
+  title: "Dashboard | AlphaForge",
+  description:
+    "View your recent backtests, monitor your active strategies, and analyze your performance.",
 };
 
 export default function DashboardPage() {

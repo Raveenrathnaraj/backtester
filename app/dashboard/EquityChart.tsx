@@ -1,9 +1,14 @@
-'use client';
+"use client";
 
-import { useEffect, useRef } from 'react';
-import { useTheme } from 'next-themes';
-import { createChart, type IChartApi, ColorType, AreaSeries } from 'lightweight-charts';
-import type { EquityPoint } from '@/types/backtester';
+import { useEffect, useRef } from "react";
+import { useTheme } from "next-themes";
+import {
+  createChart,
+  type IChartApi,
+  ColorType,
+  AreaSeries,
+} from "lightweight-charts";
+import type { EquityPoint } from "@/types/backtester";
 
 interface EquityChartProps {
   data: EquityPoint[];
@@ -14,7 +19,7 @@ export default function EquityChart({ data }: EquityChartProps) {
   const chartRef = useRef<IChartApi | null>(null);
   const { resolvedTheme } = useTheme();
 
-  const isDark = resolvedTheme === 'dark';
+  const isDark = resolvedTheme === "dark";
 
   useEffect(() => {
     if (!chartContainerRef.current || data.length === 0) return;
@@ -25,16 +30,16 @@ export default function EquityChart({ data }: EquityChartProps) {
       chartRef.current = null;
     }
 
-    const bgColor = isDark ? '#0a0a0a' : '#ffffff';
-    const textColor = isDark ? '#a1a1aa' : '#71717a';
-    const gridColor = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
-    const lineColor = isDark ? '#22c55e' : '#16a34a';
+    const bgColor = isDark ? "#0a0a0a" : "#ffffff";
+    const textColor = isDark ? "#a1a1aa" : "#71717a";
+    const gridColor = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)";
+    const lineColor = isDark ? "#22c55e" : "#16a34a";
     const topAreaColor = isDark
-      ? 'rgba(34, 197, 94, 0.3)'
-      : 'rgba(22, 163, 74, 0.2)';
+      ? "rgba(34, 197, 94, 0.3)"
+      : "rgba(22, 163, 74, 0.2)";
     const bottomAreaColor = isDark
-      ? 'rgba(34, 197, 94, 0.0)'
-      : 'rgba(22, 163, 74, 0.0)';
+      ? "rgba(34, 197, 94, 0.0)"
+      : "rgba(22, 163, 74, 0.0)";
 
     const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
@@ -42,7 +47,7 @@ export default function EquityChart({ data }: EquityChartProps) {
       layout: {
         background: { type: ColorType.Solid, color: bgColor },
         textColor,
-        fontFamily: 'var(--font-geist-sans), system-ui, sans-serif',
+        fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
         fontSize: 12,
       },
       grid: {
@@ -51,12 +56,12 @@ export default function EquityChart({ data }: EquityChartProps) {
       },
       crosshair: {
         vertLine: {
-          color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
-          labelBackgroundColor: isDark ? '#27272a' : '#f4f4f5',
+          color: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)",
+          labelBackgroundColor: isDark ? "#27272a" : "#f4f4f5",
         },
         horzLine: {
-          color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
-          labelBackgroundColor: isDark ? '#27272a' : '#f4f4f5',
+          color: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)",
+          labelBackgroundColor: isDark ? "#27272a" : "#f4f4f5",
         },
       },
       rightPriceScale: {
@@ -75,7 +80,7 @@ export default function EquityChart({ data }: EquityChartProps) {
       bottomColor: bottomAreaColor,
       lineWidth: 2,
       priceFormat: {
-        type: 'custom',
+        type: "custom",
         formatter: (price: number) => {
           if (price >= 10000000) return `₹${(price / 10000000).toFixed(2)}Cr`;
           if (price >= 100000) return `₹${(price / 100000).toFixed(2)}L`;

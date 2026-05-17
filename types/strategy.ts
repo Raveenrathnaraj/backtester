@@ -1,4 +1,4 @@
-import type { Candle } from './backtester';
+import type { Candle } from "./backtester";
 
 // --- Position & Portfolio Info ---
 
@@ -60,11 +60,11 @@ export interface StrategyContext {
 // --- Strategy Action (returned by generated functions) ---
 
 export type StrategyAction =
-  | { action: 'hold' }
-  | { action: 'buy'; shares: number }
-  | { action: 'buy'; amount: number; useAmount: true }
-  | { action: 'sell'; shares: number | 'all' }
-  | { action: 'sell'; fraction: number; useFraction: true };
+  | { action: "hold" }
+  | { action: "buy"; shares: number }
+  | { action: "buy"; amount: number; useAmount: true }
+  | { action: "sell"; shares: number | "all" }
+  | { action: "sell"; fraction: number; useFraction: true };
 
 // --- Chat Types ---
 
@@ -75,7 +75,7 @@ export interface GeneratedStrategy {
 }
 
 export interface ChatMessage {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   generatedStrategy?: GeneratedStrategy;
 }

@@ -1,4 +1,4 @@
-import { createServiceClient } from '@/lib/supabase/service';
+import { createServiceClient } from "@/lib/supabase/service";
 
 const supabase = createServiceClient();
 
@@ -16,9 +16,7 @@ export interface DBInstrument {
  * Fetch all NSE equity instruments from the database.
  */
 export async function getAllInstruments(): Promise<DBInstrument[]> {
-  const { data, error } = await supabase
-    .from('instruments')
-    .select('*');
+  const { data, error } = await supabase.from("instruments").select("*");
 
   if (error) throw new Error(`Failed to get instruments: ${error.message}`);
 
@@ -41,15 +39,14 @@ export async function updateKiteToken(
   token: number,
 ): Promise<void> {
   const { error } = await supabase
-    .from('instruments')
+    .from("instruments")
     .update({
       kite_token: token,
       kite_token_updated_at: new Date().toISOString(),
     })
-    .eq('symbol', symbol);
+    .eq("symbol", symbol);
 
-  if (error)
-    throw new Error(`Failed to update kite token: ${error.message}`);
+  if (error) throw new Error(`Failed to update kite token: ${error.message}`);
 }
 
 /**
@@ -57,8 +54,8 @@ export async function updateKiteToken(
  */
 export async function areTokensStale(): Promise<boolean> {
   const { data, error } = await supabase
-    .from('instruments')
-    .select('kite_token_updated_at')
+    .from("instruments")
+    .select("kite_token_updated_at")
     .limit(1)
     .maybeSingle();
 
@@ -95,11 +92,10 @@ export async function upsertInstruments(
   }));
 
   const { error } = await supabase
-    .from('instruments')
-    .upsert(rows, { onConflict: 'symbol' });
+    .from("instruments")
+    .upsert(rows, { onConflict: "symbol" });
 
-  if (error)
-    throw new Error(`Failed to upsert instruments: ${error.message}`);
+  if (error) throw new Error(`Failed to upsert instruments: ${error.message}`);
 }
 
 /**
@@ -107,8 +103,8 @@ export async function upsertInstruments(
  */
 export async function getInstrumentCount(): Promise<number> {
   const { count, error } = await supabase
-    .from('instruments')
-    .select('*', { count: 'exact', head: true });
+    .from("instruments")
+    .select("*", { count: "exact", head: true });
 
   if (error) return 0;
   return count ?? 0;
@@ -123,9 +119,9 @@ export async function getInstrumentsBySymbols(
   if (symbols.length === 0) return [];
 
   const { data, error } = await supabase
-    .from('instruments')
-    .select('*')
-    .in('symbol', symbols);
+    .from("instruments")
+    .select("*")
+    .in("symbol", symbols);
 
   if (error) throw new Error(`Failed to get instruments: ${error.message}`);
 

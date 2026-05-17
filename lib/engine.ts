@@ -4,9 +4,14 @@ import type {
   EquityPoint,
   BacktestSummary,
   BacktestConfig,
-} from '@/types/backtester';
-import type { StrategyAction, StrategyContext, PositionInfo, LotInfo } from '@/types/strategy';
-import { createIndicatorFunctions } from './indicators';
+} from "@/types/backtester";
+import type {
+  StrategyAction,
+  StrategyContext,
+  PositionInfo,
+  LotInfo,
+} from "@/types/strategy";
+import { createIndicatorFunctions } from "./indicators";
 
 interface Holding {
   lots: LotInfo[];
@@ -38,7 +43,7 @@ export function runBacktest(
 
   // Compile strategy function once
   // eslint-disable-next-line no-new-func
-  const strategyFn = new Function('ctx', strategyCode) as (
+  const strategyFn = new Function("ctx", strategyCode) as (
     ctx: StrategyContext,
   ) => StrategyAction;
 
@@ -94,7 +99,9 @@ export function runBacktest(
       }
 
       // Build StrategyContext
-      const position = holding ? buildPositionInfo(holding, todayCandle.close, date) : null;
+      const position = holding
+        ? buildPositionInfo(holding, todayCandle.close, date)
+        : null;
       const ctx: StrategyContext = {
         candle: todayCandle,
         symbol,
@@ -114,17 +121,17 @@ export function runBacktest(
         action = strategyFn(ctx);
       } catch {
         // If strategy throws, treat as 'hold'
-        action = { action: 'hold' };
+        action = { action: "hold" };
       }
 
       // Interpret action
-      if (action.action === 'buy') {
+      if (action.action === "buy") {
         let sharesToBuy: number;
 
-        if ('useAmount' in action && action.useAmount) {
+        if ("useAmount" in action && action.useAmount) {
           sharesToBuy = Math.floor(action.amount / todayCandle.close);
-        } else if ('shares' in action) {
-          sharesToBuy = typeof action.shares === 'number' ? action.shares : 0;
+        } else if ("shares" in action) {
+          sharesToBuy = typeof action.shares === "number" ? action.shares : 0;
         } else {
           sharesToBuy = 0;
         }
@@ -153,14 +160,14 @@ export function runBacktest(
         }
 
         totalDeployed += todayCandle.close * sharesToBuy;
-      } else if (action.action === 'sell' && holding) {
+      } else if (action.action === "sell" && holding) {
         let sharesToSell: number;
 
-        if ('useFraction' in action && action.useFraction) {
+        if ("useFraction" in action && action.useFraction) {
           sharesToSell = Math.floor(holding.totalShares * action.fraction);
-        } else if ('shares' in action) {
+        } else if ("shares" in action) {
           sharesToSell =
-            action.shares === 'all'
+            action.shares === "all"
               ? holding.totalShares
               : Math.min(action.shares as number, holding.totalShares);
         } else {
@@ -192,7 +199,7 @@ export function runBacktest(
             pnlPct,
             holdingDays,
             shares: sellFromLot,
-            status: 'closed',
+            status: "closed",
           });
 
           totalReturned += exitPrice * sellFromLot;
@@ -220,14 +227,12 @@ export function runBacktest(
     for (const [symbol, holding] of holdings) {
       const candleMap = symbolCandles.get(symbol)!;
       const todayCandle = candleMap.get(date);
-      const price = todayCandle
-        ? todayCandle.close
-        : holding.avgEntryPrice; // fallback if no data today
+      const price = todayCandle ? todayCandle.close : holding.avgEntryPrice; // fallback if no data today
       equity += price * holding.totalShares;
     }
     // Add realized P&L from closed trades
     const closedPnL = trades
-      .filter((t) => t.status === 'closed')
+      .filter((t) => t.status === "closed")
       .reduce((sum, t) => sum + t.pnlAbs, 0);
     equity += closedPnL;
 
@@ -264,14 +269,19 @@ export function runBacktest(
         pnlPct,
         holdingDays,
         shares: lot.shares,
-        status: 'open',
+        status: "open",
       });
 
       totalReturned += exitPrice * lot.shares;
     }
   }
 
-  const summary = computeSummary(trades, equityCurve, totalDeployed, totalReturned);
+  const summary = computeSummary(
+    trades,
+    equityCurve,
+    totalDeployed,
+    totalReturned,
+  );
   return { trades, equityCurve, summary };
 }
 
@@ -314,8 +324,8 @@ function computeSummary(
   totalDeployed: number,
   totalReturned: number,
 ): BacktestSummary {
-  const closedTrades = trades.filter((t) => t.status === 'closed');
-  const openTrades = trades.filter((t) => t.status === 'open');
+  const closedTrades = trades.filter((t) => t.status === "closed");
+  const openTrades = trades.filter((t) => t.status === "open");
 
   const wins = closedTrades.filter((t) => t.pnlAbs > 0);
   const losses = closedTrades.filter((t) => t.pnlAbs <= 0);
@@ -333,7 +343,8 @@ function computeSummary(
     losses.length > 0
       ? losses.reduce((sum, t) => sum + t.pnlPct, 0) / losses.length
       : 0;
-  const profitFactor = totalLosses > 0 ? totalGains / totalLosses : totalGains > 0 ? Infinity : 0;
+  const profitFactor =
+    totalLosses > 0 ? totalGains / totalLosses : totalGains > 0 ? Infinity : 0;
 
   const totalReturnPct =
     totalDeployed > 0
@@ -392,7 +403,7 @@ function emptySummary(): BacktestSummary {
 }
 
 function daysBetween(from: string, to: string): number {
-  const d1 = new Date(from + 'T00:00:00Z');
-  const d2 = new Date(to + 'T00:00:00Z');
+  const d1 = new Date(from + "T00:00:00Z");
+  const d2 = new Date(to + "T00:00:00Z");
   return Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
 }

@@ -9,17 +9,35 @@
 /* ── AlphaForge Landing Page Animations ── */
 
 @keyframes float-orb {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(30px, -40px) scale(1.05); }
-  50% { transform: translate(-20px, -80px) scale(0.95); }
-  75% { transform: translate(-40px, -30px) scale(1.02); }
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(30px, -40px) scale(1.05);
+  }
+  50% {
+    transform: translate(-20px, -80px) scale(0.95);
+  }
+  75% {
+    transform: translate(-40px, -30px) scale(1.02);
+  }
 }
 
 @keyframes float-orb-reverse {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(-40px, 30px) scale(0.95); }
-  50% { transform: translate(30px, 60px) scale(1.05); }
-  75% { transform: translate(50px, -20px) scale(0.98); }
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(-40px, 30px) scale(0.95);
+  }
+  50% {
+    transform: translate(30px, 60px) scale(1.05);
+  }
+  75% {
+    transform: translate(50px, -20px) scale(0.98);
+  }
 }
 
 @keyframes fade-in-up {
@@ -34,18 +52,32 @@
 }
 
 @keyframes pulse-glow {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
 }
 
 @keyframes grid-fade {
-  0%, 100% { opacity: 0.03; }
-  50% { opacity: 0.07; }
+  0%,
+  100% {
+    opacity: 0.03;
+  }
+  50% {
+    opacity: 0.07;
+  }
 }
 
 /* Utility classes */
@@ -71,12 +103,24 @@
 }
 
 /* Staggered delay utilities */
-.delay-100 { animation-delay: 100ms; }
-.delay-200 { animation-delay: 200ms; }
-.delay-300 { animation-delay: 300ms; }
-.delay-400 { animation-delay: 400ms; }
-.delay-500 { animation-delay: 500ms; }
-.delay-600 { animation-delay: 600ms; }
+.delay-100 {
+  animation-delay: 100ms;
+}
+.delay-200 {
+  animation-delay: 200ms;
+}
+.delay-300 {
+  animation-delay: 300ms;
+}
+.delay-400 {
+  animation-delay: 400ms;
+}
+.delay-500 {
+  animation-delay: 500ms;
+}
+.delay-600 {
+  animation-delay: 600ms;
+}
 
 /* Gradient text */
 .text-gradient {

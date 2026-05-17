@@ -1,4 +1,4 @@
-import type { Candle } from '@/types/backtester';
+import type { Candle } from "@/types/backtester";
 
 /**
  * Technical indicator functions.
@@ -148,7 +148,11 @@ export function computeATR(
     const high = relevant[i].high;
     const low = relevant[i].low;
     const prevClose = relevant[i - 1].close;
-    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+    const tr = Math.max(
+      high - low,
+      Math.abs(high - prevClose),
+      Math.abs(low - prevClose),
+    );
     trueRanges.push(tr);
   }
 
@@ -314,7 +318,6 @@ export function createIndicatorFunctions(
       memoize(`macd-${fast}-${slow}-${signal}`, () =>
         computeMACD(candles, fast, slow, signal, date),
       ),
-    prevClose: (n) =>
-      memoize(`pc-${n}`, () => getPrevClose(candles, date, n)),
+    prevClose: (n) => memoize(`pc-${n}`, () => getPrevClose(candles, date, n)),
   };
 }

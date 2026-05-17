@@ -1,5 +1,5 @@
-import { createServiceClient } from '@/lib/supabase/service';
-import type { Candle } from '@/types/backtester';
+import { createServiceClient } from "@/lib/supabase/service";
+import type { Candle } from "@/types/backtester";
 
 const supabase = createServiceClient();
 
@@ -12,17 +12,17 @@ export async function getCachedCandles(
   to: string,
 ): Promise<Candle[]> {
   const { data, error } = await supabase
-    .from('candles')
-    .select('date, open, high, low, close')
-    .eq('symbol', symbol)
-    .gte('date', from)
-    .lte('date', to)
-    .order('date', { ascending: true });
+    .from("candles")
+    .select("date, open, high, low, close")
+    .eq("symbol", symbol)
+    .gte("date", from)
+    .lte("date", to)
+    .order("date", { ascending: true });
 
   if (error) throw new Error(`Failed to get cached candles: ${error.message}`);
 
   return (data ?? []).map((row: any) => ({
-    date: typeof row.date === 'string' ? row.date.slice(0, 10) : row.date,
+    date: typeof row.date === "string" ? row.date.slice(0, 10) : row.date,
     open: row.open,
     high: row.high,
     low: row.low,
@@ -41,15 +41,14 @@ export async function getMissingRanges(
   to: string,
 ): Promise<{ from: string; to: string }[]> {
   const { data: fetched, error } = await supabase
-    .from('fetch_ranges')
-    .select('from_date, to_date')
-    .eq('symbol', symbol)
-    .lte('from_date', to)
-    .gte('to_date', from)
-    .order('from_date', { ascending: true });
+    .from("fetch_ranges")
+    .select("from_date, to_date")
+    .eq("symbol", symbol)
+    .lte("from_date", to)
+    .gte("to_date", from)
+    .order("from_date", { ascending: true });
 
-  if (error)
-    throw new Error(`Failed to get fetch ranges: ${error.message}`);
+  if (error) throw new Error(`Failed to get fetch ranges: ${error.message}`);
 
   if (!fetched || fetched.length === 0) {
     return [{ from, to }];
@@ -93,9 +92,9 @@ export async function storeCandles(
 ): Promise<void> {
   // Find global min 'from' and max 'to' for this symbol
   const { data: existing, error: fetchErr } = await supabase
-    .from('fetch_ranges')
-    .select('from_date, to_date')
-    .eq('symbol', symbol);
+    .from("fetch_ranges")
+    .select("from_date, to_date")
+    .eq("symbol", symbol);
 
   if (fetchErr)
     throw new Error(`Failed to get fetch ranges: ${fetchErr.message}`);
@@ -124,8 +123,8 @@ export async function storeCandles(
       }));
 
       const { error: insertErr } = await supabase
-        .from('candles')
-        .upsert(batch, { onConflict: 'symbol,date', ignoreDuplicates: true });
+        .from("candles")
+        .upsert(batch, { onConflict: "symbol,date", ignoreDuplicates: true });
 
       if (insertErr)
         throw new Error(`Failed to insert candles: ${insertErr.message}`);
@@ -134,21 +133,19 @@ export async function storeCandles(
 
   // Replace all existing fetch_range records with a single spanning record
   const { error: deleteErr } = await supabase
-    .from('fetch_ranges')
+    .from("fetch_ranges")
     .delete()
-    .eq('symbol', symbol);
+    .eq("symbol", symbol);
 
   if (deleteErr)
     throw new Error(`Failed to delete fetch ranges: ${deleteErr.message}`);
 
   const { error: insertRangeErr } = await supabase
-    .from('fetch_ranges')
+    .from("fetch_ranges")
     .insert({ symbol, from_date: minFrom, to_date: maxTo });
 
   if (insertRangeErr)
-    throw new Error(
-      `Failed to insert fetch range: ${insertRangeErr.message}`,
-    );
+    throw new Error(`Failed to insert fetch range: ${insertRangeErr.message}`);
 }
 
 /**
@@ -196,13 +193,13 @@ function mergeRanges(
 }
 
 function nextDay(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00Z');
+  const d = new Date(dateStr + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
 }
 
 function prevDay(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00Z');
+  const d = new Date(dateStr + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
 }

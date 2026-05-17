@@ -1,18 +1,18 @@
-'use client';
+"use client";
 
-import { useRouter, usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
-import { Button } from '@heroui/react';
-import ThemeSwitch from './ThemeSwitch';
-import FeedbackModal from './FeedbackModal';
-import { createClient } from '@/lib/supabase/browser';
-import type { User } from '@supabase/supabase-js';
+import { useRouter, usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { Button } from "@heroui/react";
+import ThemeSwitch from "./ThemeSwitch";
+import FeedbackModal from "./FeedbackModal";
+import { createClient } from "@/lib/supabase/browser";
+import type { User } from "@supabase/supabase-js";
 
 const navLinks = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/dashboard/strategy', label: 'Strategies' },
-  { href: '/dashboard/universe', label: 'Stock Lists' },
-  { href: '/how-to', label: 'How to' },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/dashboard/strategy", label: "Strategies" },
+  { href: "/dashboard/universe", label: "Stock Lists" },
+  { href: "/how-to", label: "How to" },
 ];
 
 export default function Navbar() {
@@ -47,11 +47,11 @@ export default function Navbar() {
     try {
       await supabase.auth.signOut();
       // Also clear the Kite session
-      await fetch('/api/auth/logout', { method: 'POST' });
-      router.push('/');
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/");
       router.refresh();
     } catch {
-      router.push('/');
+      router.push("/");
     }
   };
 
@@ -59,7 +59,10 @@ export default function Navbar() {
     <nav className="sticky top-0 z-50 h-16 border-b border-border backdrop-blur-xl bg-surface/80">
       <div className="flex items-center justify-between h-full max-w-6xl mx-auto px-6">
         <div className="flex items-center gap-6">
-          <a href="/" className="flex items-center gap-2.5 font-bold text-foreground no-underline tracking-tight">
+          <a
+            href="/"
+            className="flex items-center gap-2.5 font-bold text-foreground no-underline tracking-tight"
+          >
             <svg
               width="24"
               height="24"
@@ -79,8 +82,8 @@ export default function Navbar() {
           <div className="hidden sm:flex items-center gap-1">
             {navLinks.map((link) => {
               const isActive =
-                link.href === '/dashboard'
-                  ? pathname === '/dashboard'
+                link.href === "/dashboard"
+                  ? pathname === "/dashboard"
                   : pathname.startsWith(link.href);
               return (
                 <a
@@ -88,9 +91,11 @@ export default function Navbar() {
                   href={link.href}
                   className={`
                     px-3 py-1.5 rounded-lg text-sm font-medium transition-colors no-underline
-                    ${isActive
-                      ? 'bg-accent/15 text-accent'
-                      : 'text-muted hover:text-foreground hover:bg-muted/10'}
+                    ${
+                      isActive
+                        ? "bg-accent/15 text-accent"
+                        : "text-muted hover:text-foreground hover:bg-muted/10"
+                    }
                   `}
                 >
                   {link.label}
@@ -104,8 +109,8 @@ export default function Navbar() {
         <div className="hidden sm:flex items-center gap-2">
           <FeedbackModal />
           <ThemeSwitch />
-          {!loading && (
-            user ? (
+          {!loading &&
+            (user ? (
               <div className="flex items-center gap-2">
                 <span className="hidden sm:inline text-xs text-muted truncate max-w-[140px]">
                   {user.email}
@@ -116,19 +121,18 @@ export default function Navbar() {
                   isPending={loggingOut}
                   onPress={handleLogout}
                 >
-                  {loggingOut ? 'Logging out…' : 'Logout'}
+                  {loggingOut ? "Logging out…" : "Logout"}
                 </Button>
               </div>
             ) : (
               <Button
                 variant="outline"
                 size="sm"
-                onPress={() => router.push('/login')}
+                onPress={() => router.push("/login")}
               >
                 Login
               </Button>
-            )
-          )}
+            ))}
         </div>
 
         {/* Mobile Hamburger Toggle */}
@@ -141,12 +145,26 @@ export default function Navbar() {
             onPress={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
             {isMobileMenuOpen ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <line x1="4" y1="12" x2="20" y2="12" />
                 <line x1="4" y1="6" x2="20" y2="6" />
                 <line x1="4" y1="18" x2="20" y2="18" />
@@ -162,8 +180,8 @@ export default function Navbar() {
           <div className="flex flex-col gap-2">
             {navLinks.map((link) => {
               const isActive =
-                link.href === '/dashboard'
-                  ? pathname === '/dashboard'
+                link.href === "/dashboard"
+                  ? pathname === "/dashboard"
                   : pathname.startsWith(link.href);
               return (
                 <a
@@ -172,9 +190,11 @@ export default function Navbar() {
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={`
                     px-4 py-2.5 rounded-lg text-sm font-medium transition-colors no-underline
-                    ${isActive
-                      ? 'bg-accent/15 text-accent'
-                      : 'text-muted hover:text-foreground hover:bg-muted/10'}
+                    ${
+                      isActive
+                        ? "bg-accent/15 text-accent"
+                        : "text-muted hover:text-foreground hover:bg-muted/10"
+                    }
                   `}
                 >
                   {link.label}
@@ -182,13 +202,13 @@ export default function Navbar() {
               );
             })}
           </div>
-          
+
           <div className="h-px bg-border w-full" />
-          
+
           <div className="flex flex-col items-start gap-4 px-2">
             <FeedbackModal />
-            {!loading && (
-              user ? (
+            {!loading &&
+              (user ? (
                 <div className="flex flex-col gap-3 w-full border-t border-border/50 pt-3">
                   <span className="text-xs text-muted truncate">
                     Logged in as {user.email}
@@ -202,7 +222,7 @@ export default function Navbar() {
                       handleLogout();
                     }}
                   >
-                    {loggingOut ? 'Logging out…' : 'Logout'}
+                    {loggingOut ? "Logging out…" : "Logout"}
                   </Button>
                 </div>
               ) : (
@@ -211,13 +231,12 @@ export default function Navbar() {
                   className="w-full mt-2"
                   onPress={() => {
                     setIsMobileMenuOpen(false);
-                    router.push('/login');
+                    router.push("/login");
                   }}
                 >
                   Login
                 </Button>
-              )
-            )}
+              ))}
           </div>
         </div>
       )}

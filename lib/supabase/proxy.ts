@@ -1,5 +1,5 @@
-import { createServerClient } from '@supabase/ssr';
-import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * Refreshes the Supabase auth session and manages the anonymous user cookie.
@@ -38,28 +38,28 @@ export async function updateSession(request: NextRequest) {
   const authUser = data?.claims;
 
   // --- Anonymous user ID management ---
-  const existingUserId = request.cookies.get('af_user_id')?.value;
+  const existingUserId = request.cookies.get("af_user_id")?.value;
 
   if (authUser) {
     // User is authenticated — sync cookie to their auth UID
     const authUid = authUser.sub;
     if (authUid && existingUserId !== authUid) {
-      supabaseResponse.cookies.set('af_user_id', authUid, {
-        path: '/',
+      supabaseResponse.cookies.set("af_user_id", authUid, {
+        path: "/",
         httpOnly: true,
-        sameSite: 'lax',
-        secure: process.env.NODE_ENV === 'production',
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 365 * 10, // 10 years
       });
     }
   } else if (!existingUserId) {
     // No auth, no cookie → generate anonymous ID
     const anonId = crypto.randomUUID();
-    supabaseResponse.cookies.set('af_user_id', anonId, {
-      path: '/',
+    supabaseResponse.cookies.set("af_user_id", anonId, {
+      path: "/",
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
       maxAge: 60 * 60 * 24 * 365 * 10, // 10 years
     });
   }

@@ -1,12 +1,12 @@
-import { GoogleGenAI } from '@google/genai';
-import type { ChatMessage, GeneratedStrategy } from '@/types/strategy';
+import { GoogleGenAI } from "@google/genai";
+import type { ChatMessage, GeneratedStrategy } from "@/types/strategy";
 
-const GEMINI_MODEL = 'gemini-3.1-pro-preview';
+const GEMINI_MODEL = "gemini-3.1-pro-preview";
 
 function getClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY environment variable is not set');
+    throw new Error("GEMINI_API_KEY environment variable is not set");
   }
   return new GoogleGenAI({ apiKey });
 }
@@ -127,7 +127,7 @@ export async function chatWithStrategyBuilder(
 
   // Build content array for the API
   const contents = messages.map((msg) => ({
-    role: msg.role === 'assistant' ? ('model' as const) : ('user' as const),
+    role: msg.role === "assistant" ? ("model" as const) : ("user" as const),
     parts: [{ text: msg.content }],
   }));
 
@@ -141,13 +141,13 @@ export async function chatWithStrategyBuilder(
     },
   });
 
-  const text = response.text ?? '';
+  const text = response.text ?? "";
 
   // Check if the response contains a generated strategy
   const generatedStrategy = extractStrategy(text);
 
   return {
-    role: 'assistant',
+    role: "assistant",
     content: text,
     generatedStrategy: generatedStrategy ?? undefined,
   };

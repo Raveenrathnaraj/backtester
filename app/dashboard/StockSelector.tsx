@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from "react";
 import {
   Button,
   Card,
@@ -8,8 +8,8 @@ import {
   TextField,
   Input,
   Checkbox,
-} from '@heroui/react';
-import IndicesData from '@/lib/Indices.json';
+} from "@heroui/react";
+import IndicesData from "@/lib/Indices.json";
 
 interface Stock {
   symbol: string;
@@ -23,12 +23,17 @@ interface StockSelectorProps {
   disabled?: boolean;
 }
 
-export default function StockSelector({ onSelectionChange, disabled }: StockSelectorProps) {
-  const [selectedIndex, setSelectedIndex] = useState('NIFTY 50');
+export default function StockSelector({
+  onSelectionChange,
+  disabled,
+}: StockSelectorProps) {
+  const [selectedIndex, setSelectedIndex] = useState("NIFTY 50");
   const [stocks, setStocks] = useState<Stock[]>([]);
-  const [selectedSymbols, setSelectedSymbols] = useState<Set<string>>(new Set<string>());
+  const [selectedSymbols, setSelectedSymbols] = useState<Set<string>>(
+    new Set<string>(),
+  );
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   // Load stocks when index changes
@@ -37,12 +42,16 @@ export default function StockSelector({ onSelectionChange, disabled }: StockSele
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/stocks/index?index=${encodeURIComponent(selectedIndex)}`);
-        if (!res.ok) throw new Error('Failed to fetch stocks');
+        const res = await fetch(
+          `/api/stocks/index?index=${encodeURIComponent(selectedIndex)}`,
+        );
+        if (!res.ok) throw new Error("Failed to fetch stocks");
         const data = await res.json();
         setStocks(data.stocks);
         // Default to all selected for a new index
-        const allSymbols = new Set<string>(data.stocks.map((s: Stock) => s.symbol));
+        const allSymbols = new Set<string>(
+          data.stocks.map((s: Stock) => s.symbol),
+        );
         setSelectedSymbols(allSymbols);
         onSelectionChange(data.stocks.map((s: Stock) => s.kiteToken));
       } catch (err: any) {
@@ -61,7 +70,7 @@ export default function StockSelector({ onSelectionChange, disabled }: StockSele
       (s) =>
         s.symbol.toLowerCase().includes(q) ||
         s.name.toLowerCase().includes(q) ||
-        s.industry.toLowerCase().includes(q)
+        s.industry.toLowerCase().includes(q),
     );
   }, [stocks, searchQuery]);
 
@@ -73,7 +82,7 @@ export default function StockSelector({ onSelectionChange, disabled }: StockSele
       next.add(symbol);
     }
     setSelectedSymbols(next);
-    
+
     // Notify parent of token changes
     const selectedTokens = stocks
       .filter((s) => next.has(s.symbol))
@@ -106,7 +115,9 @@ export default function StockSelector({ onSelectionChange, disabled }: StockSele
       {/* Index Selector */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="text-xs font-medium text-muted mb-1.5 block">Select Index</label>
+          <label className="text-xs font-medium text-muted mb-1.5 block">
+            Select Index
+          </label>
           <select
             value={selectedIndex}
             onChange={(e) => setSelectedIndex(e.target.value)}
@@ -126,7 +137,9 @@ export default function StockSelector({ onSelectionChange, disabled }: StockSele
         </div>
 
         <div>
-          <label className="text-xs font-medium text-muted mb-1.5 block">Search Stocks</label>
+          <label className="text-xs font-medium text-muted mb-1.5 block">
+            Search Stocks
+          </label>
           <TextField
             value={searchQuery}
             onChange={setSearchQuery}
@@ -195,10 +208,12 @@ export default function StockSelector({ onSelectionChange, disabled }: StockSele
                 onClick={() => !disabled && toggleStock(stock.symbol)}
                 className={`
                   flex items-center gap-3 p-2.5 rounded-lg border transition-all cursor-pointer
-                  ${selectedSymbols.has(stock.symbol)
-                    ? 'bg-accent/10 border-accent/30'
-                    : 'bg-muted/5 border-transparent hover:bg-muted/10'}
-                  ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+                  ${
+                    selectedSymbols.has(stock.symbol)
+                      ? "bg-accent/10 border-accent/30"
+                      : "bg-muted/5 border-transparent hover:bg-muted/10"
+                  }
+                  ${disabled ? "opacity-50 cursor-not-allowed" : ""}
                 `}
               >
                 <div className="flex-shrink-0">
@@ -210,7 +225,9 @@ export default function StockSelector({ onSelectionChange, disabled }: StockSele
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-bold truncate">{stock.symbol}</p>
-                  <p className="text-[10px] text-muted truncate">{stock.name}</p>
+                  <p className="text-[10px] text-muted truncate">
+                    {stock.name}
+                  </p>
                   <p className="text-[9px] text-accent/60 truncate mt-0.5 uppercase tracking-tighter">
                     {stock.industry}
                   </p>

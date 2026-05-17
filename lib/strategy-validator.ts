@@ -1,30 +1,30 @@
-import type { StrategyAction, StrategyContext } from '@/types/strategy';
-import type { Candle } from '@/types/backtester';
-import { createIndicatorFunctions } from './indicators';
+import type { StrategyAction, StrategyContext } from "@/types/strategy";
+import type { Candle } from "@/types/backtester";
+import { createIndicatorFunctions } from "./indicators";
 
 /** Tokens that must never appear in generated strategy code. */
 const FORBIDDEN_TOKENS = [
-  'require',
-  'import',
-  'export',
-  'fetch',
-  'XMLHttpRequest',
-  'process',
-  'globalThis',
-  'window',
-  'document',
-  'eval',
-  'Function',
-  'setTimeout',
-  'setInterval',
-  'setImmediate',
-  'queueMicrotask',
-  'Deno',
-  'Bun',
-  '__dirname',
-  '__filename',
-  'module',
-  'exports',
+  "require",
+  "import",
+  "export",
+  "fetch",
+  "XMLHttpRequest",
+  "process",
+  "globalThis",
+  "window",
+  "document",
+  "eval",
+  "Function",
+  "setTimeout",
+  "setInterval",
+  "setImmediate",
+  "queueMicrotask",
+  "Deno",
+  "Bun",
+  "__dirname",
+  "__filename",
+  "module",
+  "exports",
 ];
 
 export interface ValidationResult {
@@ -43,7 +43,7 @@ export function validateStrategy(code: string): ValidationResult {
   // 1. Safety scan
   for (const token of FORBIDDEN_TOKENS) {
     // Match the token as a standalone word (not part of another identifier)
-    const regex = new RegExp(`\\b${token}\\b`, 'g');
+    const regex = new RegExp(`\\b${token}\\b`, "g");
     if (regex.test(code)) {
       return {
         valid: false,
@@ -56,7 +56,7 @@ export function validateStrategy(code: string): ValidationResult {
   let strategyFn: (ctx: StrategyContext) => unknown;
   try {
     // eslint-disable-next-line no-new-func
-    strategyFn = new Function('ctx', code) as (ctx: StrategyContext) => unknown;
+    strategyFn = new Function("ctx", code) as (ctx: StrategyContext) => unknown;
   } catch (err: any) {
     return {
       valid: false,
@@ -116,37 +116,52 @@ export function validateStrategy(code: string): ValidationResult {
 
 /** Validate that a return value matches the StrategyAction shape. */
 function validateAction(result: unknown): ValidationResult {
-  if (!result || typeof result !== 'object') {
+  if (!result || typeof result !== "object") {
     return { valid: false, error: `Expected an object, got ${typeof result}` };
   }
 
   const action = (result as any).action;
-  if (!action || !['hold', 'buy', 'sell'].includes(action)) {
+  if (!action || !["hold", "buy", "sell"].includes(action)) {
     return {
       valid: false,
       error: `Invalid action: "${action}". Must be "hold", "buy", or "sell".`,
     };
   }
 
-  if (action === 'buy') {
+  if (action === "buy") {
     const r = result as any;
     if (r.useAmount === true) {
-      if (typeof r.amount !== 'number' || r.amount <= 0) {
-        return { valid: false, error: 'Buy with useAmount requires a positive "amount" number.' };
+      if (typeof r.amount !== "number" || r.amount <= 0) {
+        return {
+          valid: false,
+          error: 'Buy with useAmount requires a positive "amount" number.',
+        };
       }
-    } else if (typeof r.shares !== 'number' || r.shares <= 0) {
-      return { valid: false, error: 'Buy requires a positive "shares" number.' };
+    } else if (typeof r.shares !== "number" || r.shares <= 0) {
+      return {
+        valid: false,
+        error: 'Buy requires a positive "shares" number.',
+      };
     }
   }
 
-  if (action === 'sell') {
+  if (action === "sell") {
     const r = result as any;
     if (r.useFraction === true) {
-      if (typeof r.fraction !== 'number' || r.fraction <= 0 || r.fraction > 1) {
-        return { valid: false, error: 'Sell with useFraction requires "fraction" between 0 and 1.' };
+      if (typeof r.fraction !== "number" || r.fraction <= 0 || r.fraction > 1) {
+        return {
+          valid: false,
+          error: 'Sell with useFraction requires "fraction" between 0 and 1.',
+        };
       }
-    } else if (r.shares !== 'all' && (typeof r.shares !== 'number' || r.shares <= 0)) {
-      return { valid: false, error: 'Sell requires "shares" as a positive number or "all".' };
+    } else if (
+      r.shares !== "all" &&
+      (typeof r.shares !== "number" || r.shares <= 0)
+    ) {
+      return {
+        valid: false,
+        error: 'Sell requires "shares" as a positive number or "all".',
+      };
     }
   }
 
@@ -178,18 +193,20 @@ function generateMockCandles(count: number): Candle[] {
 function createMockContext(
   candles: Candle[],
   date: string,
-  position: StrategyContext['position'],
+  position: StrategyContext["position"],
 ): StrategyContext {
   const todayCandle = candles[candles.length - 1];
 
   return {
     candle: todayCandle,
-    symbol: 'MOCKSTOCK',
+    symbol: "MOCKSTOCK",
     history: candles,
     position,
     portfolio: {
       totalOpenPositions: position ? 1 : 0,
-      totalDeployed: position ? position.avgEntryPrice * position.totalShares : 0,
+      totalDeployed: position
+        ? position.avgEntryPrice * position.totalShares
+        : 0,
     },
     indicators: createIndicatorFunctions(candles, date),
     config: {

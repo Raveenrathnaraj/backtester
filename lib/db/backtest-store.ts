@@ -1,5 +1,5 @@
-import { createServiceClient } from '@/lib/supabase/service';
-import type { BacktestSummary, Trade, EquityPoint } from '@/types/backtester';
+import { createServiceClient } from "@/lib/supabase/service";
+import type { BacktestSummary, Trade, EquityPoint } from "@/types/backtester";
 
 const supabase = createServiceClient();
 
@@ -17,7 +17,7 @@ export async function saveBacktestRun(
   strategyId?: string,
 ): Promise<string> {
   const { data, error } = await supabase
-    .from('backtest_runs')
+    .from("backtest_runs")
     .insert({
       user_id: userId,
       start_date: config.startDate,
@@ -30,7 +30,7 @@ export async function saveBacktestRun(
       duration_ms: durationMs,
       strategy_id: strategyId ?? null,
     })
-    .select('id')
+    .select("id")
     .single();
 
   if (error) throw new Error(`Failed to save backtest run: ${error.message}`);
@@ -42,12 +42,12 @@ export async function saveBacktestRun(
  */
 export async function listBacktestRuns(userId: string, limit = 20) {
   const { data, error } = await supabase
-    .from('backtest_runs')
+    .from("backtest_runs")
     .select(
-      'id, start_date, end_date, amount_per_buy, total_stocks, summary, created_at, duration_ms',
+      "id, start_date, end_date, amount_per_buy, total_stocks, summary, created_at, duration_ms",
     )
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error) throw new Error(`Failed to list backtest runs: ${error.message}`);
@@ -69,10 +69,10 @@ export async function listBacktestRuns(userId: string, limit = 20) {
  */
 export async function getBacktestRun(userId: string, id: string) {
   const { data, error } = await supabase
-    .from('backtest_runs')
-    .select('*')
-    .eq('id', id)
-    .eq('user_id', userId)
+    .from("backtest_runs")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (error) throw new Error(`Failed to get backtest run: ${error.message}`);

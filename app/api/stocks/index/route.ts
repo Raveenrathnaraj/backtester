@@ -1,57 +1,33 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { upsertInstruments, getInstrumentsBySymbols } from '@/lib/db/instruments';
+import { NextRequest, NextResponse } from "next/server";
+import {
+  upsertInstruments,
+  getInstrumentsBySymbols,
+} from "@/lib/db/instruments";
 
-/**
- * NSE requires a session cookie from the homepage.
- * This helper performs the "cookie dance" to fetch index data.
- */
-async function fetchNSEIndex(index: string) {
-  const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-  
-  const homeRes = await fetch('https://www.nseindia.com/', {
-    headers: { 'User-Agent': userAgent }
-  });
-  
-  const cookies = homeRes.headers.get('set-cookie');
-  if (!cookies) throw new Error('Failed to get NSE cookies');
-
-  const apiUrl = `https://www.nseindia.com/api/equity-stockIndices?index=${encodeURIComponent(index)}`;
-  const apiRes = await fetch(apiUrl, {
-    headers: {
-      'User-Agent': userAgent,
-      'Referer': 'https://www.nseindia.com/market-data/live-equity-market',
-      'Cookie': cookies,
-      'Accept': '*/*',
-      'Accept-Language': 'en-US,en;q=0.9'
-    }
-  });
-
-  if (!apiRes.ok) {
-    throw new Error(`NSE API returned ${apiRes.status}`);
-  }
-
-  return apiRes.json();
-}
+import { fetchNSEIndex } from "@/lib/nse";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const index = searchParams.get('index');
+  const index = searchParams.get("index");
 
   if (!index) {
-    return NextResponse.json({ error: 'Index parameter is required' }, { status: 400 });
+    return NextResponse.json(
+      { error: "Index parameter is required" },
+      { status: 400 },
+    );
   }
 
   try {
     const nseData = await fetchNSEIndex(index);
 
     const nseStocks = nseData.data
-      .filter((s: any) => s.symbol !== 'NIFTY 50' && s.symbol !== index)
+      .filter((s: any) => s.symbol !== "NIFTY 50" && s.symbol !== index)
       .map((s: any) => ({
         symbol: s.symbol as string,
         companyName: (s.meta?.companyName || s.symbol) as string,
-        industry: (s.meta?.industry || 'Unknown') as string,
-        series: (s.series || 'EQ') as string,
-        isinCode: (s.meta?.isin || '') as string,
+        industry: (s.meta?.industry || "Unknown") as string,
+        series: (s.series || "EQ") as string,
+        isinCode: (s.meta?.isin || "") as string,
       }));
 
     const nseSymbols = nseStocks.map((s: any) => s.symbol);
@@ -81,7 +57,7 @@ export async function GET(request: NextRequest) {
         symbol,
         name: local?.companyName || nseStock?.companyName || symbol,
         kiteToken: local?.kiteToken || null,
-        industry: local?.industry || nseStock?.industry || 'Unknown',
+        industry: local?.industry || nseStock?.industry || "Unknown",
       };
     });
 
@@ -90,7 +66,7 @@ export async function GET(request: NextRequest) {
       stocks,
     });
   } catch (error: any) {
-    console.error('NSE Fetch Error:', error);
+    console.error("NSE Fetch Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

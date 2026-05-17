@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies } from "next/headers";
 
 /**
  * Get the effective user_id for the current request.
@@ -12,11 +12,11 @@ import { cookies } from 'next/headers';
  */
 export async function getUserId(): Promise<string> {
   const cookieStore = await cookies();
-  const userId = cookieStore.get('af_user_id')?.value;
+  const userId = cookieStore.get("af_user_id")?.value;
 
   if (!userId) {
     throw new Error(
-      'No af_user_id cookie found. Ensure proxy.ts is configured correctly.',
+      "No af_user_id cookie found. Ensure proxy.ts is configured correctly.",
     );
   }
 
@@ -27,12 +27,12 @@ export async function getUserId(): Promise<string> {
  * Get the user_id from a NextRequest object (for use in API route handlers).
  */
 export function getUserIdFromRequest(request: Request): string {
-  const cookieHeader = request.headers.get('cookie') ?? '';
+  const cookieHeader = request.headers.get("cookie") ?? "";
   const match = cookieHeader.match(/af_user_id=([^;]+)/);
 
   if (!match) {
     throw new Error(
-      'No af_user_id cookie found. Ensure proxy.ts is configured correctly.',
+      "No af_user_id cookie found. Ensure proxy.ts is configured correctly.",
     );
   }
 

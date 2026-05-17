@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
 /**
  * GET /api/auth/callback
@@ -10,8 +10,8 @@ import { cookies } from 'next/headers';
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/get-started';
+  const code = searchParams.get("code");
+  const next = searchParams.get("next") ?? "/get-started";
 
   if (code) {
     const cookieStore = await cookies();
@@ -42,11 +42,11 @@ export async function GET(request: NextRequest) {
 
       if (user) {
         // Sync af_user_id cookie to auth UID
-        cookieStore.set('af_user_id', user.id, {
-          path: '/',
+        cookieStore.set("af_user_id", user.id, {
+          path: "/",
           httpOnly: true,
-          sameSite: 'lax',
-          secure: process.env.NODE_ENV === 'production',
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
           maxAge: 60 * 60 * 24 * 365 * 10, // 10 years
         });
       }
@@ -56,5 +56,7 @@ export async function GET(request: NextRequest) {
   }
 
   // If code exchange failed, redirect to error page or login
-  return NextResponse.redirect(new URL('/login?error=auth_callback_failed', origin));
+  return NextResponse.redirect(
+    new URL("/login?error=auth_callback_failed", origin),
+  );
 }
