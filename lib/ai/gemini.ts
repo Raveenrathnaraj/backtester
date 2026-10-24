@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { ChatMessage, GeneratedStrategy } from "@/types/strategy";
 
-const GEMINI_MODEL = "gemini-3.1-pro-preview";
+const GEMINI_MODEL = "gemini-3.8-flash";
 
 function getClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -137,7 +137,10 @@ export async function chatWithStrategyBuilder(
     config: {
       systemInstruction: STRATEGY_SYSTEM_PROMPT,
       temperature: 0.7,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 8192,
+      thinkingConfig: {
+        thinkingBudget: 2048,
+      },
     },
   });
 
