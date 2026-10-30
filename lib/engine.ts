@@ -21,13 +21,8 @@ interface Holding {
 }
 
 /**
- * Pure backtesting engine. No I/O, no API calls.
- *
- * Accepts a strategy function body (string) that is compiled and
- * executed in a sandboxed scope via `new Function()`.
- *
- * The strategy function receives a StrategyContext and returns a StrategyAction.
- * Positions are tracked using individual lots (FIFO for sells).
+ * Pure backtesting engine with realistic portfolio accounting,
+ * execution models (next-bar open or same-bar close), and slippage/brokerage fees.
  *
  * @param stockData Map of symbol → sorted candles (including lookback period)
  * @param config Backtest configuration
@@ -39,7 +34,17 @@ export function runBacktest(
   config: BacktestConfig,
   strategyCode: string,
 ): { trades: Trade[]; equityCurve: EquityPoint[]; summary: BacktestSummary } {
-  const { startDate, endDate, amountPerBuy } = config;
+  const {
+    startDate,
+    endDate,
+    amountPerBuy,
+    initialCapital = 1000000, // Default ₹10 Lakhs
+    executionModel = "next_open", // Default to realistic next-bar open fill
+    slippagePct = 0.05, // 0.05% slippage
+    brokerageFeePct = 0.1, // 0.1% transaction cost / STT / exchange fee
+  } = config;
+
+  const totalFeeRate = (slippagePct + brokerageFeePct) / 100;
 
   // Compile strategy function once
   // eslint-disable-next-line no-new-func
@@ -59,7 +64,7 @@ export function runBacktest(
   const tradingDates = [...tradingDatesSet].sort();
 
   if (tradingDates.length === 0) {
-    return { trades: [], equityCurve: [], summary: emptySummary() };
+    return { trades: [], equityCurve: [], summary: emptySummary(initialCapital) };
   }
 
   // Pre-build per-symbol date-indexed maps for O(1) lookups
@@ -76,13 +81,70 @@ export function runBacktest(
 
   const holdings = new Map<string, Holding>();
   const trades: Trade[] = [];
+
+  let cash = initialCapital;
   let totalDeployed = 0;
   let totalReturned = 0;
+  let maxCapitalDeployed = 0;
+
+  // Pending orders queued for next-bar execution
+  interface PendingOrder {
+    symbol: string;
+    action: StrategyAction;
+    signalDate: string;
+  }
+  const pendingOrders: PendingOrder[] = [];
 
   // Equity curve tracking
   const equityCurve: EquityPoint[] = [];
 
-  for (const date of tradingDates) {
+  for (let dateIndex = 0; dateIndex < tradingDates.length; dateIndex++) {
+    const date = tradingDates[dateIndex];
+
+    // --- PHASE 1: EXECUTE PENDING ORDERS (if executionModel === 'next_open') ---
+    if (executionModel === "next_open" && pendingOrders.length > 0) {
+      // Process pending orders at today's OPEN price
+      const ordersToExecute = [...pendingOrders];
+      pendingOrders.length = 0;
+
+      // Prioritize sells first to free up cash
+      ordersToExecute.sort((a, b) => {
+        if (a.action.action === "sell" && b.action.action !== "sell") return -1;
+        if (a.action.action !== "sell" && b.action.action === "sell") return 1;
+        return 0;
+      });
+
+      for (const order of ordersToExecute) {
+        const candleMap = symbolCandles.get(order.symbol);
+        const todayCandle = candleMap?.get(date);
+        if (!todayCandle) continue;
+
+        const holding = holdings.get(order.symbol);
+        const openPrice = todayCandle.open;
+
+        if (order.action.action === "sell" && holding) {
+          executeSell(
+            order.symbol,
+            holding,
+            order.action,
+            openPrice,
+            date,
+            totalFeeRate,
+          );
+        } else if (order.action.action === "buy") {
+          executeBuy(
+            order.symbol,
+            holding,
+            order.action,
+            openPrice,
+            date,
+            totalFeeRate,
+          );
+        }
+      }
+    }
+
+    // --- PHASE 2: UPDATE HIGHS & EVALUATE STRATEGY SIGNALS ---
     for (const [symbol, candleMap] of symbolCandles) {
       const todayCandle = candleMap.get(date);
       if (!todayCandle) continue;
@@ -98,6 +160,15 @@ export function runBacktest(
         );
       }
 
+      // Calculate current portfolio value for context
+      let currentPositionsValue = 0;
+      for (const [hSym, h] of holdings) {
+        const c = symbolCandles.get(hSym)?.get(date);
+        const p = c ? c.close : h.avgEntryPrice;
+        currentPositionsValue += p * h.totalShares;
+      }
+      const portfolioValue = cash + currentPositionsValue;
+
       // Build StrategyContext
       const position = holding
         ? buildPositionInfo(holding, todayCandle.close, date)
@@ -110,152 +181,91 @@ export function runBacktest(
         portfolio: {
           totalOpenPositions: holdings.size,
           totalDeployed,
+          cash,
+          portfolioValue,
         },
         indicators: createIndicatorFunctions(allCandles, date),
         config: { amountPerBuy },
       };
 
-      // Execute strategy
+      // Execute strategy function
       let action: StrategyAction;
       try {
         action = strategyFn(ctx);
       } catch {
-        // If strategy throws, treat as 'hold'
         action = { action: "hold" };
       }
 
-      // Interpret action
-      if (action.action === "buy") {
-        let sharesToBuy: number;
+      if (action.action === "hold") continue;
 
-        if ("useAmount" in action && action.useAmount) {
-          sharesToBuy = Math.floor(action.amount / todayCandle.close);
-        } else if ("shares" in action) {
-          sharesToBuy = typeof action.shares === "number" ? action.shares : 0;
-        } else {
-          sharesToBuy = 0;
-        }
-
-        if (sharesToBuy <= 0) continue;
-
-        const newLot: LotInfo = {
-          entryDate: date,
-          entryPrice: todayCandle.close,
-          shares: sharesToBuy,
-        };
-
-        if (holding) {
-          // Step-up: add to existing position
-          holding.lots.push(newLot);
-          holding.totalShares += sharesToBuy;
-          holding.avgEntryPrice = computeAvgEntryPrice(holding.lots);
-        } else {
-          // New position
-          holdings.set(symbol, {
-            lots: [newLot],
-            totalShares: sharesToBuy,
-            avgEntryPrice: todayCandle.close,
-            peakSinceEntry: todayCandle.close,
-          });
-        }
-
-        totalDeployed += todayCandle.close * sharesToBuy;
-      } else if (action.action === "sell" && holding) {
-        let sharesToSell: number;
-
-        if ("useFraction" in action && action.useFraction) {
-          sharesToSell = Math.floor(holding.totalShares * action.fraction);
-        } else if ("shares" in action) {
-          sharesToSell =
-            action.shares === "all"
-              ? holding.totalShares
-              : Math.min(action.shares as number, holding.totalShares);
-        } else {
-          sharesToSell = holding.totalShares;
-        }
-
-        if (sharesToSell <= 0) continue;
-
-        // FIFO sell from oldest lots
-        const exitPrice = todayCandle.close;
-        let remaining = sharesToSell;
-
-        while (remaining > 0 && holding.lots.length > 0) {
-          const lot = holding.lots[0];
-          const sellFromLot = Math.min(remaining, lot.shares);
-
-          const pnlAbs = (exitPrice - lot.entryPrice) * sellFromLot;
-          const pnlPct = ((exitPrice - lot.entryPrice) / lot.entryPrice) * 100;
-          const holdingDays = daysBetween(lot.entryDate, date);
-
-          trades.push({
+      if (executionModel === "next_open") {
+        // Queue order for next trading day's open
+        pendingOrders.push({
+          symbol,
+          action,
+          signalDate: date,
+        });
+      } else {
+        // Same-bar close execution
+        if (action.action === "buy") {
+          executeBuy(
             symbol,
-            entryDate: lot.entryDate,
-            entryPrice: lot.entryPrice,
-            exitDate: date,
-            exitPrice,
-            peakSinceEntry: holding.peakSinceEntry,
-            pnlAbs,
-            pnlPct,
-            holdingDays,
-            shares: sellFromLot,
-            status: "closed",
-          });
-
-          totalReturned += exitPrice * sellFromLot;
-          lot.shares -= sellFromLot;
-          remaining -= sellFromLot;
-
-          if (lot.shares <= 0) {
-            holding.lots.shift(); // Remove exhausted lot
-          }
-        }
-
-        holding.totalShares -= sharesToSell;
-
-        if (holding.totalShares <= 0 || holding.lots.length === 0) {
-          holdings.delete(symbol);
-        } else {
-          holding.avgEntryPrice = computeAvgEntryPrice(holding.lots);
+            holding,
+            action,
+            todayCandle.close,
+            date,
+            totalFeeRate,
+          );
+        } else if (action.action === "sell" && holding) {
+          executeSell(
+            symbol,
+            holding,
+            action,
+            todayCandle.close,
+            date,
+            totalFeeRate,
+          );
         }
       }
-      // action === 'hold' → do nothing
     }
 
-    // Compute daily equity: sum of all open positions at market value
-    let equity = 0;
+    // --- PHASE 3: RECORD DAILY NAV / EQUITY ---
+    let openPositionsValue = 0;
     for (const [symbol, holding] of holdings) {
       const candleMap = symbolCandles.get(symbol)!;
       const todayCandle = candleMap.get(date);
-      const price = todayCandle ? todayCandle.close : holding.avgEntryPrice; // fallback if no data today
-      equity += price * holding.totalShares;
+      const price = todayCandle ? todayCandle.close : holding.avgEntryPrice;
+      openPositionsValue += price * holding.totalShares;
     }
-    // Add realized P&L from closed trades
-    const closedPnL = trades
-      .filter((t) => t.status === "closed")
-      .reduce((sum, t) => sum + t.pnlAbs, 0);
-    equity += closedPnL;
 
-    equityCurve.push({ date, equity });
+    const dailyEquity = cash + openPositionsValue;
+    if (openPositionsValue > maxCapitalDeployed) {
+      maxCapitalDeployed = openPositionsValue;
+    }
+
+    equityCurve.push({
+      date,
+      equity: Math.round(dailyEquity * 100) / 100,
+      cash: Math.round(cash * 100) / 100,
+      openPositionsValue: Math.round(openPositionsValue * 100) / 100,
+    });
   }
 
-  // Close any remaining open positions at last available price
+  // --- PHASE 4: CLOSE OPEN POSITIONS AT FINAL DATE ---
   const lastDate = tradingDates[tradingDates.length - 1];
   for (const [symbol, holding] of holdings) {
     const candleMap = symbolCandles.get(symbol)!;
-    // Find last available candle
     let lastCandle: Candle | undefined;
     for (let i = tradingDates.length - 1; i >= 0; i--) {
       lastCandle = candleMap.get(tradingDates[i]);
       if (lastCandle) break;
     }
 
-    const exitPrice = lastCandle?.close ?? holding.avgEntryPrice;
-
-    // Record each remaining lot as an open trade
+    const rawExitPrice = lastCandle?.close ?? holding.avgEntryPrice;
+    // Mark to market at final bar
     for (const lot of holding.lots) {
-      const pnlAbs = (exitPrice - lot.entryPrice) * lot.shares;
-      const pnlPct = ((exitPrice - lot.entryPrice) / lot.entryPrice) * 100;
+      const pnlAbs = (rawExitPrice - lot.entryPrice) * lot.shares;
+      const pnlPct = ((rawExitPrice - lot.entryPrice) / lot.entryPrice) * 100;
       const holdingDays = daysBetween(lot.entryDate, lastDate);
 
       trades.push({
@@ -265,24 +275,152 @@ export function runBacktest(
         exitDate: null,
         exitPrice: null,
         peakSinceEntry: holding.peakSinceEntry,
-        pnlAbs,
-        pnlPct,
+        pnlAbs: Math.round(pnlAbs * 100) / 100,
+        pnlPct: Math.round(pnlPct * 100) / 100,
         holdingDays,
         shares: lot.shares,
         status: "open",
       });
 
-      totalReturned += exitPrice * lot.shares;
+      totalReturned += rawExitPrice * lot.shares;
     }
   }
 
+  // Final summary calculation
   const summary = computeSummary(
     trades,
     equityCurve,
+    initialCapital,
     totalDeployed,
     totalReturned,
+    maxCapitalDeployed,
   );
+
   return { trades, equityCurve, summary };
+
+  // --- Helper execution closures ---
+
+  function executeBuy(
+    symbol: string,
+    existingHolding: Holding | undefined,
+    action: StrategyAction & { action: "buy" },
+    executionPrice: number,
+    date: string,
+    feeRate: number,
+  ) {
+    // Effective price factoring slippage
+    const effectiveEntryPrice = executionPrice * (1 + feeRate);
+
+    let budget = 0;
+    if ("useAmount" in action && action.useAmount) {
+      budget = action.amount;
+    } else if ("shares" in action && typeof action.shares === "number") {
+      budget = action.shares * effectiveEntryPrice;
+    }
+
+    // Capital check: cannot spend more cash than available
+    const availableCash = Math.max(0, cash);
+    const amountToSpend = Math.min(budget, availableCash);
+    if (amountToSpend < effectiveEntryPrice) return; // Cannot afford 1 share
+
+    const sharesToBuy = Math.floor(amountToSpend / effectiveEntryPrice);
+    if (sharesToBuy <= 0) return;
+
+    const totalCost = sharesToBuy * effectiveEntryPrice;
+    cash -= totalCost;
+    totalDeployed += totalCost;
+
+    const newLot: LotInfo = {
+      entryDate: date,
+      entryPrice: Math.round(effectiveEntryPrice * 100) / 100,
+      shares: sharesToBuy,
+    };
+
+    if (existingHolding) {
+      existingHolding.lots.push(newLot);
+      existingHolding.totalShares += sharesToBuy;
+      existingHolding.avgEntryPrice = computeAvgEntryPrice(existingHolding.lots);
+      existingHolding.peakSinceEntry = Math.max(
+        existingHolding.peakSinceEntry,
+        executionPrice,
+      );
+    } else {
+      holdings.set(symbol, {
+        lots: [newLot],
+        totalShares: sharesToBuy,
+        avgEntryPrice: Math.round(effectiveEntryPrice * 100) / 100,
+        peakSinceEntry: executionPrice,
+      });
+    }
+  }
+
+  function executeSell(
+    symbol: string,
+    holding: Holding,
+    action: StrategyAction & { action: "sell" },
+    executionPrice: number,
+    date: string,
+    feeRate: number,
+  ) {
+    let sharesToSell = 0;
+    if ("useFraction" in action && action.useFraction) {
+      sharesToSell = Math.floor(holding.totalShares * action.fraction);
+    } else if ("shares" in action) {
+      sharesToSell =
+        action.shares === "all"
+          ? holding.totalShares
+          : Math.min(action.shares as number, holding.totalShares);
+    } else {
+      sharesToSell = holding.totalShares;
+    }
+
+    if (sharesToSell <= 0) return;
+
+    // Effective exit price factoring slippage and brokerage
+    const effectiveExitPrice = executionPrice * (1 - feeRate);
+    let remaining = sharesToSell;
+
+    while (remaining > 0 && holding.lots.length > 0) {
+      const lot = holding.lots[0];
+      const sellFromLot = Math.min(remaining, lot.shares);
+
+      const pnlAbs = (effectiveExitPrice - lot.entryPrice) * sellFromLot;
+      const pnlPct = ((effectiveExitPrice - lot.entryPrice) / lot.entryPrice) * 100;
+      const holdingDays = daysBetween(lot.entryDate, date);
+
+      trades.push({
+        symbol,
+        entryDate: lot.entryDate,
+        entryPrice: lot.entryPrice,
+        exitDate: date,
+        exitPrice: Math.round(effectiveExitPrice * 100) / 100,
+        peakSinceEntry: holding.peakSinceEntry,
+        pnlAbs: Math.round(pnlAbs * 100) / 100,
+        pnlPct: Math.round(pnlPct * 100) / 100,
+        holdingDays,
+        shares: sellFromLot,
+        status: "closed",
+      });
+
+      const proceeds = effectiveExitPrice * sellFromLot;
+      cash += proceeds;
+      totalReturned += proceeds;
+
+      lot.shares -= sellFromLot;
+      remaining -= sellFromLot;
+
+      if (lot.shares <= 0) {
+        holding.lots.shift();
+      }
+    }
+
+    holding.totalShares -= sharesToSell;
+    if (holding.totalShares <= 0 || holding.lots.length === 0) {
+      holdings.delete(symbol);
+    } else {
+      holding.avgEntryPrice = computeAvgEntryPrice(holding.lots);
+    }
+  }
 }
 
 // --- Helpers ---
@@ -301,9 +439,9 @@ function buildPositionInfo(
   return {
     lots: holding.lots.map((l) => ({ ...l })),
     totalShares: holding.totalShares,
-    avgEntryPrice: holding.avgEntryPrice,
+    avgEntryPrice: Math.round(holding.avgEntryPrice * 100) / 100,
     peakSinceEntry: holding.peakSinceEntry,
-    currentPnlPct,
+    currentPnlPct: Math.round(currentPnlPct * 100) / 100,
     daysHeld: daysBetween(firstLotDate, currentDate),
   };
 }
@@ -321,8 +459,10 @@ function computeAvgEntryPrice(lots: LotInfo[]): number {
 function computeSummary(
   trades: Trade[],
   equityCurve: EquityPoint[],
+  initialCapital: number,
   totalDeployed: number,
   totalReturned: number,
+  maxCapitalDeployed: number,
 ): BacktestSummary {
   const closedTrades = trades.filter((t) => t.status === "closed");
   const openTrades = trades.filter((t) => t.status === "open");
@@ -346,9 +486,15 @@ function computeSummary(
   const profitFactor =
     totalLosses > 0 ? totalGains / totalLosses : totalGains > 0 ? Infinity : 0;
 
+  const finalEquity =
+    equityCurve.length > 0
+      ? equityCurve[equityCurve.length - 1].equity
+      : initialCapital;
+
+  // True Portfolio Return based on initial capital
   const totalReturnPct =
-    totalDeployed > 0
-      ? ((totalReturned - totalDeployed) / totalDeployed) * 100
+    initialCapital > 0
+      ? ((finalEquity - initialCapital) / initialCapital) * 100
       : 0;
 
   const avgHoldingDays =
@@ -356,7 +502,7 @@ function computeSummary(
       ? trades.reduce((sum, t) => sum + t.holdingDays, 0) / trades.length
       : 0;
 
-  // Max drawdown on equity curve
+  // Max drawdown on portfolio equity curve
   let maxDrawdownPct = 0;
   if (equityCurve.length > 0) {
     let peak = equityCurve[0].equity;
@@ -369,23 +515,74 @@ function computeSummary(
     }
   }
 
+  // Institutional Metrics: CAGR & Sharpe Ratio
+  let cagrPct = 0;
+  let sharpeRatio = 0;
+
+  if (equityCurve.length > 1) {
+    const firstDate = new Date(equityCurve[0].date + "T00:00:00Z");
+    const lastDate = new Date(
+      equityCurve[equityCurve.length - 1].date + "T00:00:00Z",
+    );
+    const totalDays = Math.max(
+      1,
+      (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    const years = totalDays / 365.25;
+
+    if (years > 0.05 && finalEquity > 0 && initialCapital > 0) {
+      cagrPct = (Math.pow(finalEquity / initialCapital, 1 / years) - 1) * 100;
+    }
+
+    // Daily returns array for Sharpe Ratio
+    const dailyReturns: number[] = [];
+    for (let i = 1; i < equityCurve.length; i++) {
+      const prev = equityCurve[i - 1].equity;
+      const curr = equityCurve[i].equity;
+      if (prev > 0) {
+        dailyReturns.push((curr - prev) / prev);
+      }
+    }
+
+    if (dailyReturns.length > 5) {
+      const meanReturn =
+        dailyReturns.reduce((sum, r) => sum + r, 0) / dailyReturns.length;
+      const variance =
+        dailyReturns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) /
+        dailyReturns.length;
+      const stdDev = Math.sqrt(variance);
+
+      // Assume 6.5% risk-free rate per annum (approx Indian 91-day T-Bill)
+      const dailyRiskFree = 0.065 / 252;
+      if (stdDev > 0) {
+        sharpeRatio =
+          ((meanReturn - dailyRiskFree) / stdDev) * Math.sqrt(252);
+      }
+    }
+  }
+
   return {
     totalTrades: trades.length,
     openTrades: openTrades.length,
     closedTrades: closedTrades.length,
-    winRate,
-    avgWinPct,
-    avgLossPct,
-    profitFactor,
-    maxDrawdownPct,
-    totalReturnPct,
-    avgHoldingDays,
-    totalDeployed,
-    totalReturned,
+    winRate: Math.round(winRate * 10) / 10,
+    avgWinPct: Math.round(avgWinPct * 100) / 100,
+    avgLossPct: Math.round(avgLossPct * 100) / 100,
+    profitFactor: Math.round(profitFactor * 100) / 100,
+    maxDrawdownPct: Math.round(maxDrawdownPct * 100) / 100,
+    totalReturnPct: Math.round(totalReturnPct * 100) / 100,
+    cagrPct: Math.round(cagrPct * 100) / 100,
+    sharpeRatio: Math.round(sharpeRatio * 100) / 100,
+    avgHoldingDays: Math.round(avgHoldingDays),
+    totalDeployed: Math.round(totalDeployed),
+    maxCapitalDeployed: Math.round(maxCapitalDeployed),
+    totalReturned: Math.round(totalReturned),
+    initialCapital,
+    finalEquity: Math.round(finalEquity),
   };
 }
 
-function emptySummary(): BacktestSummary {
+function emptySummary(initialCapital = 1000000): BacktestSummary {
   return {
     totalTrades: 0,
     openTrades: 0,
@@ -396,9 +593,14 @@ function emptySummary(): BacktestSummary {
     profitFactor: 0,
     maxDrawdownPct: 0,
     totalReturnPct: 0,
+    cagrPct: 0,
+    sharpeRatio: 0,
     avgHoldingDays: 0,
     totalDeployed: 0,
+    maxCapitalDeployed: 0,
     totalReturned: 0,
+    initialCapital,
+    finalEquity: initialCapital,
   };
 }
 

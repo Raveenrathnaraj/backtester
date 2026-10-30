@@ -73,8 +73,8 @@ export async function POST(request: NextRequest) {
     resolvedStrategyId = defaultStrategy.id;
   }
 
-  // Date range for historical data: start 365 days before startDate for lookback
-  const lookbackDate = dateMinusDays(startDate, 365);
+  // Date range for historical data: start 450 days before startDate for 252-day and EMA indicator warm-up
+  const lookbackDate = dateMinusDays(startDate, 450);
 
   const stream = new ReadableStream({
     async start(controller) {

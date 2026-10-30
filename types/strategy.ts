@@ -20,6 +20,8 @@ export interface PositionInfo {
 export interface PortfolioInfo {
   totalOpenPositions: number;
   totalDeployed: number;
+  cash?: number;
+  portfolioValue?: number;
 }
 
 // --- Indicator Functions ---

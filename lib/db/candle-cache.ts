@@ -80,17 +80,13 @@ export async function getMissingRanges(
   return gaps;
 }
 
-/**
- * Store newly fetched candles and record the fetch range.
- * Consolidates all fetch ranges for a symbol into a single spanning record.
- */
 export async function storeCandles(
   symbol: string,
   from: string,
   to: string,
   data: Candle[],
 ): Promise<void> {
-  // Find global min 'from' and max 'to' for this symbol
+  // Fetch existing ranges for this symbol
   const { data: existing, error: fetchErr } = await supabase
     .from("fetch_ranges")
     .select("from_date, to_date")
@@ -99,14 +95,12 @@ export async function storeCandles(
   if (fetchErr)
     throw new Error(`Failed to get fetch ranges: ${fetchErr.message}`);
 
-  let minFrom = from;
-  let maxTo = to;
-  for (const r of existing ?? []) {
-    const rd = r.from_date.slice(0, 10);
-    const rt = r.to_date.slice(0, 10);
-    if (rd < minFrom) minFrom = rd;
-    if (rt > maxTo) maxTo = rt;
-  }
+  const allRanges = (existing ?? []).map((r: any) => ({
+    from: r.from_date.slice(0, 10),
+    to: r.to_date.slice(0, 10),
+  }));
+  allRanges.push({ from, to });
+  const merged = mergeRanges(allRanges);
 
   // Insert candles (upsert — skip duplicates)
   if (data.length > 0) {
@@ -131,7 +125,7 @@ export async function storeCandles(
     }
   }
 
-  // Replace all existing fetch_range records with a single spanning record
+  // Replace existing fetch_range records with clean merged intervals
   const { error: deleteErr } = await supabase
     .from("fetch_ranges")
     .delete()
@@ -140,12 +134,19 @@ export async function storeCandles(
   if (deleteErr)
     throw new Error(`Failed to delete fetch ranges: ${deleteErr.message}`);
 
-  const { error: insertRangeErr } = await supabase
-    .from("fetch_ranges")
-    .insert({ symbol, from_date: minFrom, to_date: maxTo });
+  if (merged.length > 0) {
+    const records = merged.map((r) => ({
+      symbol,
+      from_date: r.from,
+      to_date: r.to,
+    }));
+    const { error: insertRangeErr } = await supabase
+      .from("fetch_ranges")
+      .insert(records);
 
-  if (insertRangeErr)
-    throw new Error(`Failed to insert fetch range: ${insertRangeErr.message}`);
+    if (insertRangeErr)
+      throw new Error(`Failed to insert fetch range: ${insertRangeErr.message}`);
+  }
 }
 
 /**

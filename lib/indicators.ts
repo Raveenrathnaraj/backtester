@@ -79,17 +79,26 @@ export function computeRSI(
     changes.push(relevant[i].close - relevant[i - 1].close);
   }
 
-  // Initial average gain/loss from last `period` changes
-  const recentChanges = changes.slice(-period);
-
+  // Wilder's RSI (RMA smoothing)
+  // First period: simple average
   let avgGain = 0;
   let avgLoss = 0;
-  for (const ch of recentChanges) {
+  for (let i = 0; i < period; i++) {
+    const ch = changes[i];
     if (ch > 0) avgGain += ch;
     else avgLoss += Math.abs(ch);
   }
   avgGain /= period;
   avgLoss /= period;
+
+  // Remaining changes: Wilder's smoothing
+  for (let i = period; i < changes.length; i++) {
+    const ch = changes[i];
+    const gain = ch > 0 ? ch : 0;
+    const loss = ch < 0 ? Math.abs(ch) : 0;
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+  }
 
   if (avgLoss === 0) return 100;
   const rs = avgGain / avgLoss;
@@ -156,10 +165,18 @@ export function computeATR(
     trueRanges.push(tr);
   }
 
-  const recentTR = trueRanges.slice(-period);
-  if (recentTR.length < period) return null;
+  // Wilder's smoothing for ATR (RMA)
+  let atr = 0;
+  for (let i = 0; i < period; i++) {
+    atr += trueRanges[i];
+  }
+  atr /= period;
 
-  return recentTR.reduce((sum, tr) => sum + tr, 0) / period;
+  for (let i = period; i < trueRanges.length; i++) {
+    atr = (atr * (period - 1) + trueRanges[i]) / period;
+  }
+
+  return atr;
 }
 
 // --- Bollinger Bands ---

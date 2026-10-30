@@ -49,6 +49,10 @@ export default function BacktestDashboard() {
   // Config state
   const [startDate, setStartDate] = useState("2023-01-01");
   const [endDate, setEndDate] = useState("2023-12-31");
+  const [initialCapital, setInitialCapital] = useState("1000000"); // ₹10 Lakhs default
+  const [executionModel, setExecutionModel] = useState<"next_open" | "same_close">("next_open");
+  const [slippagePct, setSlippagePct] = useState("0.05");
+  const [brokerageFeePct, setBrokerageFeePct] = useState("0.1");
   const amountPerBuy = 10000; // Default; strategies embed their own amount in generated code
   const [randomRunsCount, setRandomRunsCount] = useState("5");
   const [selectedTokens, setSelectedTokens] = useState<number[]>([]);
@@ -208,6 +212,10 @@ export default function BacktestDashboard() {
             startDate: sd,
             endDate: ed,
             amountPerBuy: amount,
+            initialCapital: Number(initialCapital) || 1000000,
+            executionModel,
+            slippagePct: Number(slippagePct) || 0.05,
+            brokerageFeePct: Number(brokerageFeePct) || 0.1,
             strategyId: selectedStrategyId,
             selectedTokens,
           }),
@@ -587,6 +595,35 @@ export default function BacktestDashboard() {
                 </TextField>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <TextField
+                  isRequired
+                  type="number"
+                  value={initialCapital}
+                  onChange={setInitialCapital}
+                  isDisabled={running}
+                >
+                  <Label>Initial Capital (₹)</Label>
+                  <Input min={10000} step={10000} />
+                </TextField>
+                <div>
+                  <label className="text-xs font-medium text-muted mb-1.5 block">
+                    Execution Model
+                  </label>
+                  <select
+                    value={executionModel}
+                    onChange={(e) =>
+                      setExecutionModel(e.target.value as "next_open" | "same_close")
+                    }
+                    disabled={running}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-shadow"
+                  >
+                    <option value="next_open">Next-Day Open (Realistic)</option>
+                    <option value="same_close">Same-Day Close (MOC)</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-muted">
@@ -831,11 +868,12 @@ export default function BacktestDashboard() {
             label="Total Return"
             value={`${summary.totalReturnPct >= 0 ? "+" : ""}${summary.totalReturnPct.toFixed(2)}%`}
             color={summary.totalReturnPct >= 0 ? "success" : "danger"}
+            sub={summary.cagrPct !== undefined ? `CAGR: ${summary.cagrPct >= 0 ? "+" : ""}${summary.cagrPct.toFixed(1)}%` : undefined}
           />
           <StatCard
             label="Win Rate"
             value={`${summary.winRate.toFixed(1)}%`}
-            sub={`${summary.closedTrades} closed trades`}
+            sub={`${summary.closedTrades} closed / ${summary.totalTrades} total`}
           />
           <StatCard
             label="Profit Factor"
@@ -852,28 +890,33 @@ export default function BacktestDashboard() {
             label="Max Drawdown"
             value={`-${summary.maxDrawdownPct.toFixed(2)}%`}
             color="danger"
+            sub={summary.sharpeRatio !== undefined ? `Sharpe: ${summary.sharpeRatio.toFixed(2)}` : undefined}
           />
           <StatCard
-            label="Total Deployed"
-            value={formatINR(summary.totalDeployed)}
-          />
-          <StatCard
-            label="Total Returned"
-            value={formatINR(summary.totalReturned)}
+            label="Final Portfolio Value"
+            value={formatINR(summary.finalEquity ?? (summary.initialCapital ?? 1000000) * (1 + summary.totalReturnPct / 100))}
             color={
-              summary.totalReturned >= summary.totalDeployed
+              (summary.finalEquity ?? 1000000) >= (summary.initialCapital ?? 1000000)
                 ? "success"
                 : "danger"
             }
+            sub={`Start: ${formatINR(summary.initialCapital ?? 1000000)}`}
+          />
+          <StatCard
+            label="Peak Capital Deployed"
+            value={formatINR(summary.maxCapitalDeployed ?? summary.totalDeployed)}
+            sub={`Turnover: ${formatINR(summary.totalDeployed)}`}
           />
           <StatCard
             label="Avg Holding"
             value={`${Math.round(summary.avgHoldingDays)} days`}
+            sub={summary.openTrades > 0 ? `${summary.openTrades} open positions` : "All positions closed"}
           />
           <StatCard
-            label="Open Positions"
-            value={String(summary.openTrades)}
-            sub={`of ${summary.totalTrades} total`}
+            label="Sharpe Ratio"
+            value={summary.sharpeRatio !== undefined ? summary.sharpeRatio.toFixed(2) : "N/A"}
+            color={(summary.sharpeRatio ?? 0) >= 1 ? "success" : (summary.sharpeRatio ?? 0) < 0 ? "danger" : undefined}
+            sub="Indian T-Bill rf=6.5%"
           />
         </div>
       )}
